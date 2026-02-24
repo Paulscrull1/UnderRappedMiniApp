@@ -14,3 +14,6 @@ YANDEX_MUSIC_TOKEN = os.environ.get("YANDEX_MUSIC_TOKEN", "")
 # перешли любое сообщение из канала боту @userinfobot или @getidsbot — получишь ID (например -1001234567890).
 # Тогда «Мои скачанные» копирует треки оттуда, а сообщение пользователю удаляется при «Назад в меню».
 STORAGE_CHAT_ID = os.environ.get("STORAGE_CHAT_ID", "").strip() or None
+
+# URL Mini App (HTTPS). Для разработки: ngrok или другой туннель.
+MINI_APP_URL = os.environ.get("MINI_APP_URL", "").strip() or None

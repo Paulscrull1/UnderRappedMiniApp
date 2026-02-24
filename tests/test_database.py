@@ -62,6 +62,7 @@ def test_get_top_tracks_by_rating(temp_db):
     database.save_review(2, "t1", r, "A", "Art1", "U2")
     top = database.get_top_tracks_by_rating(limit=5)
     assert len(top) >= 1
+    assert top[0]["track_id"] == "t1"
     assert top[0]["title"] == "A"
     assert top[0]["count"] == 2
 

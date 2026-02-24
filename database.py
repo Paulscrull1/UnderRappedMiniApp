@@ -331,12 +331,12 @@ def get_last_reviews(user_id, limit=10):
 
 def get_top_tracks_by_rating(limit=10):
     """
-    Топ треков по среднему баллу
+    Топ треков по среднему баллу (с track_id для ссылок и избранного).
     """
     conn = _connect()
     cursor = conn.cursor()
     cursor.execute('''
-        SELECT track_title, track_artist, AVG(total), COUNT(*)
+        SELECT track_id, track_title, track_artist, AVG(total), COUNT(*)
         FROM reviews
         GROUP BY track_id
         HAVING COUNT(*) >= 1
@@ -348,10 +348,11 @@ def get_top_tracks_by_rating(limit=10):
 
     return [
         {
-            'title': r[0],
-            'artist': r[1],
-            'avg_score': round(r[2], 1),
-            'count': r[3]
+            'track_id': r[0],
+            'title': r[1],
+            'artist': r[2],
+            'avg_score': round(r[3], 1),
+            'count': r[4]
         }
         for r in rows
     ]

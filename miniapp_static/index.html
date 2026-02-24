@@ -1,0 +1,1133 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Музыкальная игра</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0f0f14;
+      --bg-card: rgba(255,255,255,0.05);
+      --bg-card-hover: rgba(255,255,255,0.08);
+      --text: #f0f0f5;
+      --text-muted: #8b8b9e;
+      --accent: #7c5cff;
+      --accent-dim: rgba(124, 92, 255, 0.25);
+      --success: #34d399;
+      --danger: #f87171;
+      --radius: 16px;
+      --radius-sm: 12px;
+      --shadow: 0 4px 24px rgba(0,0,0,0.25);
+      --nav-height: 56px;
+      --safe-bottom: env(safe-area-inset-bottom, 0);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 0;
+      padding-bottom: calc(var(--nav-height) + var(--safe-bottom) + 12px);
+      font-family: 'Manrope', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      -webkit-font-smoothing: antialiased;
+    }
+    /* Telegram theme override */
+    body.tg-theme-set {
+      --bg: var(--tg-theme-bg-color, var(--bg));
+      --text: var(--tg-theme-text-color, var(--text));
+      --text-muted: var(--tg-theme-hint-color, var(--text-muted));
+      --accent: var(--tg-theme-button-color, var(--accent));
+    }
+
+    .app-header {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      background: rgba(15,15,20,0.9);
+      backdrop-filter: saturate(180%) blur(12px);
+      -webkit-backdrop-filter: saturate(180%) blur(12px);
+      padding: 12px 16px 14px;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+    .app-header-inner {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      max-width: 480px;
+      margin: 0 auto;
+    }
+    .app-title {
+      font-size: 1.25rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin: 0;
+    }
+    .level-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--bg-card);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 20px;
+      padding: 6px 12px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--text-muted);
+    }
+    .level-pill strong { color: var(--accent); }
+
+    .main {
+      max-width: 480px;
+      margin: 0 auto;
+      padding: 16px;
+    }
+
+    /* Bottom nav */
+    .bottom-nav {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: calc(var(--nav-height) + var(--safe-bottom));
+      padding-bottom: var(--safe-bottom);
+      background: rgba(15,15,20,0.95);
+      backdrop-filter: blur(12px);
+      border-top: 1px solid rgba(255,255,255,0.06);
+      display: flex;
+      justify-content: space-around;
+      align-items: center;
+      z-index: 20;
+    }
+    .nav-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+      padding: 8px 12px;
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      font-family: inherit;
+      font-size: 0.7rem;
+      cursor: pointer;
+      transition: color 0.2s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .nav-item:active { opacity: 0.8; }
+    .nav-item.active { color: var(--accent); }
+    .nav-item .icon { font-size: 1.35rem; }
+
+    .panel { display: none; }
+    .panel.active { display: block; animation: fadeIn 0.25s ease; }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+    .section-title {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-muted);
+      margin: 0 0 12px;
+      padding-left: 2px;
+    }
+
+    /* Cards */
+    .card {
+      background: var(--bg-card);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: var(--radius);
+      padding: 16px;
+      margin-bottom: 12px;
+      transition: background 0.2s;
+    }
+    .track-card {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 12px 14px;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      text-decoration: none;
+      color: inherit;
+      margin-bottom: 8px;
+      background: var(--bg-card);
+      border: 1px solid rgba(255,255,255,0.06);
+      transition: background 0.2s, transform 0.15s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .track-card:active { background: var(--bg-card-hover); transform: scale(0.99); }
+    .track-card-cover {
+      width: 52px;
+      height: 52px;
+      border-radius: 10px;
+      object-fit: cover;
+      flex-shrink: 0;
+      background: rgba(0,0,0,0.3);
+    }
+    .track-card-info { flex: 1; min-width: 0; }
+    .track-card-title {
+      font-size: 0.95rem;
+      font-weight: 600;
+      margin: 0 0 2px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .track-card-artist {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      margin: 0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .track-card-badge {
+      font-size: 0.7rem;
+      font-weight: 600;
+      color: var(--accent);
+      background: var(--accent-dim);
+      padding: 2px 8px;
+      border-radius: 8px;
+      flex-shrink: 0;
+    }
+
+    .daily-hero {
+      text-align: center;
+      padding: 20px 0 8px;
+    }
+    .daily-hero-cover {
+      width: 180px;
+      height: 180px;
+      border-radius: 20px;
+      object-fit: cover;
+      margin: 0 auto 16px;
+      display: block;
+      box-shadow: var(--shadow);
+      background: rgba(0,0,0,0.3);
+    }
+    .daily-hero-title { font-size: 1.2rem; font-weight: 700; margin: 0 0 4px; }
+    .daily-hero-artist { font-size: 0.95rem; color: var(--text-muted); margin: 0 0 16px; }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: var(--radius-sm);
+      padding: 12px 20px;
+      font-family: inherit;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: none;
+      transition: opacity 0.2s, transform 0.1s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .btn:active { opacity: 0.9; transform: scale(0.98); }
+    .btn-outline {
+      background: transparent;
+      border: 2px solid rgba(255,255,255,0.2);
+      color: var(--text);
+    }
+    .btn-block { width: 100%; }
+    .btn:disabled, .btn.loading { opacity: 0.6; pointer-events: none; }
+
+    /* Search */
+    .search-wrap {
+      position: sticky;
+      top: 0;
+      z-index: 5;
+      background: var(--bg);
+      padding-bottom: 12px;
+      margin-bottom: 8px;
+    }
+    .search-input {
+      width: 100%;
+      padding: 12px 16px 12px 44px;
+      border-radius: var(--radius-sm);
+      border: 1px solid rgba(255,255,255,0.1);
+      background: var(--bg-card);
+      color: var(--text);
+      font-family: inherit;
+      font-size: 1rem;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .search-input::placeholder { color: var(--text-muted); }
+    .search-input:focus { border-color: var(--accent); }
+    .search-box { position: relative; }
+    .search-box::before {
+      content: '🔍';
+      position: absolute;
+      left: 14px;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 1rem;
+    }
+
+    /* Rating form — полноэкранный слой поверх всего (в т.ч. поиск) */
+    body.overlay-open {
+      overflow: hidden;
+      position: fixed;
+      width: 100%;
+      height: 100%;
+    }
+    .rating-screen {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 100;
+      background: var(--bg);
+      overflow-y: auto;
+      padding: 16px;
+      padding-bottom: 80px;
+      -webkit-overflow-scrolling: touch;
+    }
+    .rating-screen.hidden { display: none !important; }
+    .rating-back {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      font-size: 1rem;
+      padding: 8px 0;
+      margin-bottom: 12px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-family: inherit;
+    }
+    .criteria-row {
+      margin-bottom: 14px;
+    }
+    .criteria-row label {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.9rem;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+    }
+    .criteria-row .val { font-weight: 600; color: var(--text); }
+    .criteria-row input[type="range"] {
+      width: 100%;
+      height: 8px;
+      border-radius: 4px;
+      accent-color: var(--accent);
+      background: var(--bg-card);
+    }
+    .empty-state {
+      text-align: center;
+      padding: 48px 24px;
+      color: var(--text-muted);
+      font-size: 0.95rem;
+    }
+    .empty-state .icon { font-size: 3rem; margin-bottom: 12px; opacity: 0.5; }
+
+    /* Profile */
+    .profile-avatar {
+      width: 80px;
+      height: 80px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--accent-dim), var(--bg-card));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 2rem;
+      margin: 0 auto 12px;
+    }
+    .profile-name { font-size: 1.25rem; font-weight: 700; text-align: center; margin: 0 0 4px; }
+    .profile-level { text-align: center; color: var(--text-muted); font-size: 0.9rem; margin: 0 0 16px; }
+    .progress-bar-wrap {
+      height: 8px;
+      background: var(--bg-card);
+      border-radius: 4px;
+      overflow: hidden;
+      margin-bottom: 8px;
+    }
+    .progress-bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent), #9d7cff);
+      border-radius: 4px;
+      transition: width 0.3s ease;
+    }
+    .progress-bar-text { font-size: 0.8rem; color: var(--text-muted); }
+
+    /* Leaderboard */
+    .leader-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+    .leader-row:last-child { border-bottom: none; }
+    .leader-rank {
+      width: 28px;
+      font-weight: 700;
+      font-size: 1rem;
+      color: var(--text-muted);
+    }
+    .leader-rank.top1 { color: #fbbf24; }
+    .leader-rank.top2 { color: #94a3b8; }
+    .leader-rank.top3 { color: #b45309; }
+    .leader-info { flex: 1; min-width: 0; }
+    .leader-name { font-weight: 600; margin: 0; }
+    .leader-exp { font-size: 0.8rem; color: var(--text-muted); margin: 0; }
+    .leader-level { font-size: 0.8rem; font-weight: 600; color: var(--accent); }
+
+    .msg { font-size: 0.9rem; margin-top: 8px; }
+    .msg.error { color: var(--danger); }
+    .msg.success { color: var(--success); }
+    .tabs-inner { display: flex; gap: 8px; margin-bottom: 16px; }
+    .tabs-inner button {
+      padding: 8px 14px;
+      border-radius: 10px;
+      border: 1px solid rgba(255,255,255,0.1);
+      background: var(--bg-card);
+      color: var(--text-muted);
+      font-family: inherit;
+      font-size: 0.85rem;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .tabs-inner button.active { background: var(--accent-dim); color: var(--accent); border-color: var(--accent); }
+    .text-muted { color: var(--text-muted); }
+    .review-textarea {
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: var(--radius-sm);
+      border: 1px solid rgba(255,255,255,0.1);
+      background: var(--bg-card);
+      color: var(--text);
+      font-family: inherit;
+      font-size: 0.9rem;
+      resize: vertical;
+      min-height: 60px;
+      margin-bottom: 12px;
+      box-sizing: border-box;
+    }
+    .review-textarea::placeholder { color: var(--text-muted); }
+    .btn-fav { margin-top: 4px; }
+
+    .exp-gain-box {
+      background: linear-gradient(135deg, rgba(52, 211, 153, 0.2), rgba(52, 211, 153, 0.08));
+      border: 2px solid var(--success);
+      border-radius: var(--radius);
+      padding: 20px;
+      text-align: center;
+      margin: 16px 0;
+      animation: expPop 0.4s ease;
+    }
+    @keyframes expPop {
+      0% { transform: scale(0.9); opacity: 0; }
+      50% { transform: scale(1.02); }
+      100% { transform: scale(1); opacity: 1; }
+    }
+    .exp-gain-box .exp-value { font-size: 1.75rem; font-weight: 700; color: var(--success); margin: 0 0 4px; }
+    .exp-gain-box .exp-label { font-size: 0.9rem; color: var(--text-muted); margin: 0; }
+    .exp-gain-box.hidden { display: none !important; }
+
+    body.help-overlay-open { overflow: hidden; }
+    .help-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 200;
+      background: var(--bg);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      overflow-y: auto;
+    }
+    .help-overlay.hidden { display: none !important; }
+    .help-card {
+      background: var(--bg-card);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: var(--radius);
+      padding: 24px;
+      max-width: 360px;
+      width: 100%;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+    }
+    .help-card h2 { margin: 0 0 12px; font-size: 1.25rem; }
+    .help-card p { margin: 0 0 16px; font-size: 0.95rem; color: var(--text-muted); line-height: 1.45; }
+    .help-card ul { margin: 0 0 20px; padding-left: 20px; color: var(--text-muted); font-size: 0.9rem; line-height: 1.6; }
+    .help-card .help-dont-show { margin-bottom: 16px; font-size: 0.85rem; color: var(--text-muted); }
+    .help-card .help-dont-show input { margin-right: 8px; }
+    .daily-buttons { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-top: 12px; }
+    .daily-buttons .btn { flex: 1; min-width: 140px; }
+  </style>
+</head>
+<body>
+  <!-- Справка при первом запуске (по умолчанию видна; скрывается скриптом ниже, если пользователь уже видел) -->
+  <div id="helpOverlay" class="help-overlay">
+    <div class="help-card">
+      <h2>🎵 Как пользоваться</h2>
+      <p>Слушайте музыку, оценивайте треки по пяти критериям и копите EXP. Чем больше оцениваете — тем выше уровень и место в лидерборде.</p>
+      <ul>
+        <li><strong>Главная</strong> — трек дня и топ по оценкам сообщества</li>
+        <li><strong>Чарт</strong> — хиты Яндекс.Музыки</li>
+        <li><strong>Поиск</strong> — найдите трек по названию или исполнителю</li>
+        <li><strong>Плейлист</strong> — загрузите треки по ссылке из Яндекса</li>
+        <li><strong>Моё</strong> — ваши оценки и избранное</li>
+        <li><strong>Профиль</strong> — уровень, прогресс и лидерборд</li>
+      </ul>
+      <label class="help-dont-show"><input type="checkbox" id="helpDontShow"> Больше не показывать</label>
+      <button type="button" class="btn btn-block" id="helpCloseBtn">Понятно</button>
+    </div>
+  </div>
+  <script>
+    (function(){ try { if (localStorage.getItem('miniapp_help_seen')) document.getElementById('helpOverlay').classList.add('hidden'); else document.body.classList.add('help-overlay-open'); } catch(e) {} })();
+  </script>
+
+  <header class="app-header">
+    <div class="app-header-inner">
+      <h1 class="app-title">🎵 Игра</h1>
+      <div class="level-pill" id="levelBadge">Ур.1 · 0 EXP</div>
+    </div>
+  </header>
+
+  <main class="main">
+    <!-- Home -->
+    <section id="panelHome" class="panel active">
+      <p class="section-title">Трек дня</p>
+      <div class="card" id="dailyCard">
+        <p style="margin:0; color: var(--text-muted);">Загрузка…</p>
+      </div>
+      <div id="dailyRatingCard" class="card" style="display: none;">
+        <div id="dailyExpGainBox" class="exp-gain-box hidden" style="display: none;"></div>
+        <p class="section-title">Оцени трек</p>
+        <div id="dailyCriteriaList"></div>
+        <button type="button" class="btn btn-block" id="submitDailyRating">Отправить оценку</button>
+        <p class="msg success" id="dailySuccess"></p>
+        <p class="msg error" id="dailyError"></p>
+      </div>
+      <p class="section-title">Топ по оценкам</p>
+      <div id="topTracksList"></div>
+    </section>
+
+    <!-- Chart -->
+    <section id="panelChart" class="panel">
+      <p class="section-title">Чарт Яндекс.Музыки</p>
+      <div id="chartList"></div>
+    </section>
+
+    <!-- Search -->
+    <section id="panelSearch" class="panel">
+      <div class="search-wrap">
+        <div class="search-box">
+          <input type="text" class="search-input" id="searchInput" placeholder="Исполнитель или трек..." autocomplete="off">
+        </div>
+      </div>
+      <div id="searchResults"></div>
+    </section>
+
+    <!-- My -->
+    <section id="panelMy" class="panel">
+      <div class="tabs-inner">
+        <button type="button" class="my-tab active" data-my="reviews">Мои оценки</button>
+        <button type="button" class="my-tab" data-my="favorites">Избранное</button>
+      </div>
+      <div id="myReviewsBlock">
+        <div id="myReviewsList"></div>
+      </div>
+      <div id="myFavoritesBlock" style="display: none;">
+        <div id="myFavoritesList"></div>
+      </div>
+    </section>
+
+    <!-- Profile = Leaderboard -->
+    <section id="panelProfile" class="panel">
+      <div class="card">
+        <div class="profile-avatar" id="profileAvatar">👤</div>
+        <p class="profile-name" id="profileName">—</p>
+        <p class="profile-level" id="profileLevel">Уровень 1 · 0 EXP</p>
+        <div class="progress-bar-wrap">
+          <div class="progress-bar-fill" id="progressFill" style="width: 0%"></div>
+        </div>
+        <p class="progress-bar-text" id="progressText">0 / 100 EXP до след. уровня</p>
+      </div>
+      <p class="section-title">Лидерборд</p>
+      <div class="card">
+        <div id="leaderboardList"></div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Playlist -->
+  <section id="panelPlaylist" class="panel">
+    <p class="section-title">Плейлист по ссылке</p>
+    <div class="card">
+      <p class="text-muted" style="font-size:0.85rem; margin:0 0 10px;">Вставь ссылку на плейлист Яндекс.Музыки</p>
+      <div class="search-box" style="margin-bottom:10px;">
+        <input type="text" class="search-input" id="playlistUrlInput" placeholder="https://music.yandex.ru/..." autocomplete="off">
+      </div>
+      <button type="button" class="btn btn-block" id="loadPlaylistBtn">Загрузить треки</button>
+    </div>
+    <div id="playlistTracksList"></div>
+  </section>
+
+  <!-- Rating overlay (for any track) -->
+  <div id="ratingOverlay" class="rating-screen hidden">
+    <button type="button" class="rating-back" id="ratingBack">← Назад</button>
+    <div id="ratingTrackInfo"></div>
+    <div id="ratingFavoriteWrap" style="margin-top:8px;"></div>
+    <div id="ratingExpGainBox" class="exp-gain-box hidden" style="display: none;"></div>
+    <div class="card" style="margin-top: 12px;">
+      <p class="section-title">Оценка</p>
+      <div id="ratingCriteriaList"></div>
+      <label class="section-title" style="display:block; margin-top:12px;">Рецензия (необязательно)</label>
+      <textarea id="ratingReviewText" class="review-textarea" placeholder="Пару слов о треке..." maxlength="500" rows="3"></textarea>
+      <button type="button" class="btn btn-block" id="submitRatingBtn">Отправить оценку</button>
+      <p class="msg success" id="ratingSuccess"></p>
+      <p class="msg error" id="ratingError"></p>
+    </div>
+  </div>
+
+  <nav class="bottom-nav">
+    <button type="button" class="nav-item active" data-panel="Home"><span class="icon">🏠</span>Главная</button>
+    <button type="button" class="nav-item" data-panel="Chart"><span class="icon">📊</span>Чарт</button>
+    <button type="button" class="nav-item" data-panel="Search"><span class="icon">🔍</span>Поиск</button>
+    <button type="button" class="nav-item" data-panel="Playlist"><span class="icon">📑</span>Плейлист</button>
+    <button type="button" class="nav-item" data-panel="My"><span class="icon">❤️</span>Моё</button>
+    <button type="button" class="nav-item" data-panel="Profile"><span class="icon">👤</span>Профиль</button>
+  </nav>
+
+  <script>
+    const tg = window.Telegram?.WebApp;
+    if (tg) {
+      tg.ready();
+      tg.expand();
+      if (tg.themeParams?.bg_color) document.body.classList.add('tg-theme-set');
+    }
+
+    const API = '';
+
+    function getInitData() {
+      return (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initData) || '';
+    }
+
+    function headers() {
+      const h = { 'Content-Type': 'application/json' };
+      const initData = getInitData();
+      if (initData) h['X-Telegram-Init-Data'] = initData;
+      return h;
+    }
+    async function api(path) {
+      const r = await fetch(API + path, { headers: headers() });
+      if (!r.ok) throw new Error(await r.text().then(t => t.slice(0, 200)));
+      return r.json();
+    }
+    async function apiPost(path, body) {
+      const r = await fetch(API + path, { method: 'POST', headers: headers(), body: JSON.stringify(body) });
+      if (!r.ok) {
+        const text = await r.text();
+        if (r.status === 401) {
+          let detail = 'TELEGRAM_REQUIRED';
+          try {
+            const j = JSON.parse(text);
+            if (j.detail === 'init_data_missing') detail = 'INIT_MISSING';
+            else if (j.detail === 'init_data_invalid') detail = 'INIT_INVALID';
+          } catch (_) {}
+          throw new Error(detail);
+        }
+        throw new Error(text.slice(0, 200) || 'Ошибка сети');
+      }
+      return r.json();
+    }
+    async function apiDelete(path) {
+      const r = await fetch(API + path, { method: 'DELETE', headers: headers() });
+      if (!r.ok) throw new Error(await r.text().then(t => t.slice(0, 200)));
+      return r.json();
+    }
+
+    function escapeHtml(s) {
+      const d = document.createElement('div');
+      d.textContent = s ?? '';
+      return d.innerHTML;
+    }
+
+    let criteriaConfig = { criteria: [], names: {}, max_score: 50 };
+    let dailyTrack = null;
+    let currentRatingTrack = null;
+
+    async function loadCriteria() {
+      try {
+        const data = await api('/criteria');
+        if (data && data.criteria && data.criteria.length) criteriaConfig = data;
+      } catch (_) {}
+      return criteriaConfig.criteria && criteriaConfig.criteria.length > 0;
+    }
+
+    async function loadUser() {
+      try {
+        const d = await api('/user/me');
+        document.getElementById('levelBadge').textContent = `Ур.${d.level} · ${d.exp} EXP`;
+        document.getElementById('profileName').textContent = escapeHtml(d.nickname || 'Игрок');
+        document.getElementById('profileLevel').textContent = `Уровень ${d.level} · ${d.exp} EXP`;
+        const expInLvl = d.exp % 100;
+        const toNext = 100 - expInLvl;
+        document.getElementById('progressFill').style.width = expInLvl + '%';
+        document.getElementById('progressText').textContent = `${expInLvl} / 100 EXP до след. уровня`;
+        return d;
+      } catch (e) {
+        document.getElementById('levelBadge').textContent = 'Ур.1 · 0 EXP';
+        return null;
+      }
+    }
+
+    function renderCriteria(containerId, prefix) {
+      const container = document.getElementById(containerId);
+      if (!container) return;
+      container.innerHTML = '';
+      for (const key of criteriaConfig.criteria) {
+        const name = criteriaConfig.names[key] || key;
+        const div = document.createElement('div');
+        div.className = 'criteria-row';
+        div.innerHTML = `<label>${escapeHtml(name)} <span class="val" data-val="${key}">5</span></label><input type="range" min="1" max="10" value="5" data-key="${key}" data-prefix="${prefix}">`;
+        const input = div.querySelector('input');
+        const valSpan = div.querySelector('[data-val]');
+        input.addEventListener('input', () => { valSpan.textContent = input.value; });
+        container.appendChild(div);
+      }
+    }
+
+    function getRatings(prefix = '') {
+      const ratings = {};
+      const sel = prefix ? `input[data-prefix="${prefix}"]` : '#dailyCriteriaList input[data-key], #ratingCriteriaList input[data-key]';
+      document.querySelectorAll(sel).forEach(input => {
+        const k = input.dataset.key;
+        if (k) ratings[k] = parseInt(input.value, 10);
+      });
+      return ratings;
+    }
+
+    async function loadDaily() {
+      const card = document.getElementById('dailyCard');
+      try {
+        const track = await api('/tracks/daily');
+        dailyTrack = track;
+        const dailyExpBox = document.getElementById('dailyExpGainBox');
+        if (dailyExpBox) { dailyExpBox.classList.add('hidden'); dailyExpBox.style.display = 'none'; }
+        const trackId = track.id || track.track_id || '';
+        card.innerHTML = `
+          <div class="daily-hero">
+            <img class="daily-hero-cover" src="${escapeHtml(track.cover_url || '')}" alt="" onerror="this.style.display='none'">
+            <p class="daily-hero-title">${escapeHtml(track.title)}</p>
+            <p class="daily-hero-artist">${escapeHtml(track.artist)}</p>
+            <div class="daily-buttons">
+              <a href="${escapeHtml(track.track_url || '#')}" target="_blank" class="btn">▶ Слушать</a>
+              <div id="dailyFavoriteWrap"></div>
+            </div>
+          </div>`;
+        document.getElementById('dailyRatingCard').style.display = 'block';
+        if (!criteriaConfig.criteria || criteriaConfig.criteria.length === 0) await loadCriteria();
+        renderCriteria('dailyCriteriaList', 'daily');
+        if (trackId) {
+          try {
+            const check = await api('/user/favorites/check/' + encodeURIComponent(trackId));
+            const inFav = check.in_favorites === true;
+            const wrap = document.getElementById('dailyFavoriteWrap');
+            if (wrap) {
+              wrap.innerHTML = `<button type="button" class="btn btn-outline btn-fav" id="dailyFavBtn">${inFav ? '❤️ В избранном' : '🤍 В избранное'}</button>`;
+              document.getElementById('dailyFavBtn').addEventListener('click', () => toggleDailyFavorite(inFav));
+            }
+          } catch (_) {}
+        }
+      } catch (e) {
+        card.innerHTML = '<p class="empty-state">Не удалось загрузить трек дня</p>';
+      }
+    }
+
+    async function loadTopTracks() {
+      const el = document.getElementById('topTracksList');
+      try {
+        const r = await fetch(API + '/tracks/top?limit=5', { headers: headers() });
+        const data = r.ok ? (await r.json().catch(() => ({}))) : {};
+        const tracks = Array.isArray(data.tracks) ? data.tracks : [];
+        if (tracks.length === 0) {
+          el.innerHTML = '<p class="empty-state"><span class="icon">📊</span>Пока нет оценённых треков</p>';
+          return;
+        }
+        el.innerHTML = tracks.map(t => `
+          <a class="track-card" href="#" data-track-id="${escapeHtml(t.track_id || '')}" data-title="${escapeHtml(t.title || '')}" data-artist="${escapeHtml(t.artist || '')}" data-cover="${escapeHtml(t.cover_url||'')}" data-genre="${escapeHtml(t.genre||'')}" data-url="${escapeHtml(t.track_url||'')}">
+            <img class="track-card-cover" src="${escapeHtml(t.cover_url||'')}" alt="" onerror="this.style.display='none'">
+            <div class="track-card-info">
+              <p class="track-card-title">${escapeHtml(t.title || 'Без названия')}</p>
+              <p class="track-card-artist">${escapeHtml(t.artist || 'Неизвестен')}</p>
+            </div>
+            <span class="track-card-badge">${t.avg_score != null ? t.avg_score : 0}/50</span>
+          </a>`).join('');
+        el.querySelectorAll('.track-card').forEach(a => {
+          a.addEventListener('click', (e) => { e.preventDefault(); openRateTrack(a.dataset); });
+        });
+      } catch (_) {
+        el.innerHTML = '<p class="empty-state">Не удалось загрузить</p>';
+      }
+    }
+
+    async function toggleDailyFavorite(currentInFav) {
+      if (!dailyTrack) return;
+      const trackId = dailyTrack.id || dailyTrack.track_id;
+      if (!trackId) return;
+      const btn = document.getElementById('dailyFavBtn');
+      if (!btn) return;
+      btn.disabled = true;
+      try {
+        if (currentInFav) {
+          await apiDelete('/user/favorites/' + encodeURIComponent(trackId));
+          btn.textContent = '🤍 В избранное';
+          dailyTrack._inFav = false;
+        } else {
+          await apiPost('/user/favorites', {
+            track_id: trackId,
+            track_title: dailyTrack.title,
+            track_artist: dailyTrack.artist
+          });
+          btn.textContent = '❤️ В избранном';
+          dailyTrack._inFav = true;
+        }
+        const next = dailyTrack._inFav;
+        btn.onclick = () => toggleDailyFavorite(next);
+      } catch (_) {}
+      btn.disabled = false;
+    }
+
+    function renderTrackList(containerId, tracks, options = {}) {
+      const el = document.getElementById(containerId);
+      if (!el) return;
+      if (!tracks || tracks.length === 0) {
+        el.innerHTML = '<p class="empty-state"><span class="icon">🎧</span>Ничего нет</p>';
+        return;
+      }
+      const showBadge = options.showBadge !== false;
+      el.innerHTML = tracks.map(t => {
+        const id = t.track_id || t.id;
+        const title = t.title || t.track_title;
+        const artist = t.artist || t.track_artist;
+        const cover = t.cover_url || '';
+        const badge = showBadge && (t.avg_score != null || t.total != null) ? `<span class="track-card-badge">${(t.avg_score ?? t.total) ?? ''}/50</span>` : '';
+        return `<a class="track-card" href="#" data-track-id="${escapeHtml(id)}" data-title="${escapeHtml(title)}" data-artist="${escapeHtml(artist)}" data-cover="${escapeHtml(cover)}" data-genre="${escapeHtml(t.genre||'')}" data-url="${escapeHtml(t.track_url||'')}">
+          <img class="track-card-cover" src="${escapeHtml(cover)}" alt="" onerror="this.style.display='none'">
+          <div class="track-card-info"><p class="track-card-title">${escapeHtml(title)}</p><p class="track-card-artist">${escapeHtml(artist)}</p></div>
+          ${badge}
+        </a>`;
+      }).join('');
+      el.querySelectorAll('.track-card').forEach(a => {
+        a.addEventListener('click', (e) => { e.preventDefault(); openRateTrack(a.dataset); });
+      });
+    }
+
+    async function loadChart() {
+      try {
+        const data = await api('/tracks/chart?limit=30');
+        renderTrackList('chartList', data.tracks || [], { showBadge: false });
+      } catch (_) {
+        document.getElementById('chartList').innerHTML = '<p class="empty-state">Не удалось загрузить чарт</p>';
+      }
+    }
+
+    let searchTimeout;
+    document.getElementById('searchInput').addEventListener('input', (e) => {
+      clearTimeout(searchTimeout);
+      const q = e.target.value.trim();
+      if (!q) { document.getElementById('searchResults').innerHTML = ''; return; }
+      searchTimeout = setTimeout(async () => {
+        try {
+          const data = await api('/tracks/search?q=' + encodeURIComponent(q) + '&limit=15');
+          renderTrackList('searchResults', data.tracks || [], { showBadge: false });
+        } catch (_) {
+          document.getElementById('searchResults').innerHTML = '<p class="empty-state">Ошибка поиска</p>';
+        }
+      }, 350);
+    });
+
+    async function loadMyReviews() {
+      try {
+        const data = await api('/user/reviews?limit=30');
+        const list = data.reviews || [];
+        const el = document.getElementById('myReviewsList');
+        if (list.length === 0) {
+          el.innerHTML = '<p class="empty-state"><span class="icon">📋</span>Вы ещё не оценили ни одного трека</p>';
+          return;
+        }
+        const ratings = (r) => (r.ratings && typeof r.ratings === 'object') ? r.ratings : {};
+        el.innerHTML = list.map(r => {
+          const rt = ratings(r);
+          const title = escapeHtml(r.title || 'Без названия');
+          const artist = escapeHtml(r.artist || 'Неизвестен');
+          const tid = escapeHtml(r.track_id || '');
+          const revText = escapeHtml((r.review_text || '').toString());
+          return `<a class="track-card" href="#" data-track-id="${tid}" data-title="${title}" data-artist="${artist}" data-cover="" data-genre="" data-url="" data-rhymes="${rt.rhymes ?? ''}" data-rhythm="${rt.rhythm ?? ''}" data-style="${rt.style ?? ''}" data-charisma="${rt.charisma ?? ''}" data-vibe="${rt.vibe ?? ''}" data-review-text="${revText}">
+            <img class="track-card-cover" src="" alt="" onerror="this.style.display='none'">
+            <div class="track-card-info"><p class="track-card-title">${title}</p><p class="track-card-artist">${artist}</p></div>
+            <span class="track-card-badge">${r.total != null ? r.total : ''}/50</span>
+          </a>`;
+        }).join('');
+        el.querySelectorAll('.track-card').forEach(a => {
+          a.addEventListener('click', (e) => { e.preventDefault(); openRateTrack(a.dataset); });
+        });
+      } catch (_) {
+        document.getElementById('myReviewsList').innerHTML = '<p class="empty-state">Не удалось загрузить</p>';
+      }
+    }
+
+    async function loadFavorites() {
+      try {
+        const data = await api('/user/favorites');
+        const list = data.favorites || [];
+        const el = document.getElementById('myFavoritesList');
+        if (list.length === 0) {
+          el.innerHTML = '<p class="empty-state"><span class="icon">🤍</span>В избранном пока пусто</p>';
+          return;
+        }
+        renderTrackList('myFavoritesList', list.map(f => ({ track_id: f.track_id, title: f.title, artist: f.artist, cover_url: '' })), { showBadge: false });
+      } catch (_) {
+        document.getElementById('myFavoritesList').innerHTML = '<p class="empty-state">Не удалось загрузить</p>';
+      }
+    }
+
+    async function loadLeaderboard() {
+      try {
+        const data = await api('/leaderboard');
+        const list = data.leaders || [];
+        document.getElementById('leaderboardList').innerHTML = list.map((u, i) => {
+          const rankClass = i === 0 ? 'top1' : i === 1 ? 'top2' : i === 2 ? 'top3' : '';
+          return `<div class="leader-row"><span class="leader-rank ${rankClass}">${i + 1}</span><div class="leader-info"><p class="leader-name">${escapeHtml(u.nickname)}</p><p class="leader-exp">${u.exp} EXP</p></div><span class="leader-level">Ур.${u.level}</span></div>`;
+        }).join('');
+      } catch (_) {
+        document.getElementById('leaderboardList').innerHTML = '<p class="empty-state">Не удалось загрузить</p>';
+      }
+    }
+
+    async function openRateTrack(data) {
+      currentRatingTrack = {
+        track_id: data.track_id || data.trackId,
+        title: data.title,
+        artist: data.artist,
+        cover_url: data.cover || data.coverUrl || '',
+        genre: data.genre || '',
+        track_url: data.url || ''
+      };
+      document.getElementById('ratingTrackInfo').innerHTML = `
+        <div class="card">
+          <div class="daily-hero">
+            ${currentRatingTrack.cover_url ? `<img class="daily-hero-cover" src="${escapeHtml(currentRatingTrack.cover_url)}" alt="">` : ''}
+            <p class="daily-hero-title">${escapeHtml(currentRatingTrack.title)}</p>
+            <p class="daily-hero-artist">${escapeHtml(currentRatingTrack.artist)}</p>
+            ${currentRatingTrack.track_url ? `<a href="${escapeHtml(currentRatingTrack.track_url)}" target="_blank" class="btn btn-outline">Слушать в Яндексе</a>` : ''}
+          </div>
+        </div>`;
+      if (!criteriaConfig.criteria || criteriaConfig.criteria.length === 0) await loadCriteria();
+      renderCriteria('ratingCriteriaList', 'rating');
+      const criteriaKeys = ['rhymes', 'rhythm', 'style', 'charisma', 'vibe'];
+      for (const key of criteriaKeys) {
+        const val = data[key];
+        if (val !== undefined && val !== '' && val != null) {
+          const input = document.querySelector(`#ratingCriteriaList input[data-key="${key}"]`);
+          const valSpan = document.querySelector(`#ratingCriteriaList [data-val="${key}"]`);
+          if (input) { input.value = val; if (valSpan) valSpan.textContent = val; }
+        }
+      }
+      const reviewTextEl = document.getElementById('ratingReviewText');
+      const reviewTextRaw = data.review_text !== undefined ? data.review_text : data.reviewText;
+      if (reviewTextEl) reviewTextEl.value = (reviewTextRaw !== undefined && reviewTextRaw !== null) ? String(reviewTextRaw).trim() : '';
+      document.getElementById('ratingSuccess').textContent = '';
+      document.getElementById('ratingError').textContent = '';
+      const ratingExpBox = document.getElementById('ratingExpGainBox');
+      if (ratingExpBox) { ratingExpBox.classList.add('hidden'); ratingExpBox.style.display = 'none'; }
+      const favWrap = document.getElementById('ratingFavoriteWrap');
+      favWrap.innerHTML = '';
+      if (currentRatingTrack.track_id) {
+        try {
+          const check = await api('/user/favorites/check/' + encodeURIComponent(currentRatingTrack.track_id));
+          const inFav = check.in_favorites === true;
+          favWrap.innerHTML = `<button type="button" class="btn btn-outline btn-fav" id="ratingFavBtn">${inFav ? '❤️ В избранном' : '🤍 В избранное'}</button>`;
+          document.getElementById('ratingFavBtn').addEventListener('click', () => toggleFavoriteInOverlay(inFav));
+        } catch (_) { favWrap.innerHTML = ''; }
+      }
+      const overlay = document.getElementById('ratingOverlay');
+      overlay.classList.remove('hidden');
+      overlay.scrollTop = 0;
+      document.body.classList.add('overlay-open');
+    }
+
+    async function toggleFavoriteInOverlay(currentInFav) {
+      if (!currentRatingTrack || !currentRatingTrack.track_id) return;
+      const btn = document.getElementById('ratingFavBtn');
+      if (!btn) return;
+      btn.disabled = true;
+      try {
+        if (currentInFav) {
+          await apiDelete('/user/favorites/' + encodeURIComponent(currentRatingTrack.track_id));
+          btn.textContent = '🤍 В избранное';
+          currentRatingTrack._inFav = false;
+        } else {
+          await apiPost('/user/favorites', {
+            track_id: currentRatingTrack.track_id,
+            track_title: currentRatingTrack.title,
+            track_artist: currentRatingTrack.artist
+          });
+          btn.textContent = '❤️ В избранном';
+          currentRatingTrack._inFav = true;
+        }
+        const newState = currentRatingTrack._inFav;
+        btn.onclick = () => toggleFavoriteInOverlay(newState);
+      } catch (_) {}
+      btn.disabled = false;
+    }
+
+    function closeRatingOverlay() {
+      document.getElementById('ratingOverlay').classList.add('hidden');
+      document.body.classList.remove('overlay-open');
+      currentRatingTrack = null;
+    }
+
+    document.getElementById('ratingBack').addEventListener('click', closeRatingOverlay);
+
+    async function submitRating(isDaily = false) {
+      const track = isDaily ? dailyTrack : currentRatingTrack;
+      if (!track) return;
+      const btn = isDaily ? document.getElementById('submitDailyRating') : document.getElementById('submitRatingBtn');
+      const successEl = document.getElementById(isDaily ? 'dailySuccess' : 'ratingSuccess');
+      const errEl = document.getElementById(isDaily ? 'dailyError' : 'ratingError');
+      successEl.textContent = '';
+      errEl.textContent = '';
+      let ratings = getRatings(isDaily ? 'daily' : 'rating');
+      if (Object.keys(ratings).length < 5) {
+        if (!criteriaConfig.criteria || criteriaConfig.criteria.length === 0) {
+          const ok = await loadCriteria();
+          if (ok) {
+            if (isDaily) renderCriteria('dailyCriteriaList', 'daily');
+            else renderCriteria('ratingCriteriaList', 'rating');
+            ratings = getRatings(isDaily ? 'daily' : 'rating');
+          }
+        }
+        if (Object.keys(ratings).length < 5) {
+          errEl.textContent = criteriaConfig.criteria && criteriaConfig.criteria.length ? 'Заполните все критерии' : 'Не удалось загрузить форму. Проверьте интернет и обновите страницу.';
+          return;
+        }
+      }
+      btn.classList.add('loading');
+      try {
+        const trackId = track.track_id ?? track.id;
+        const reviewText = !isDaily && document.getElementById('ratingReviewText')
+          ? document.getElementById('ratingReviewText').value.trim().slice(0, 500) || null
+          : null;
+        const res = await apiPost('/reviews', {
+          track_id: trackId,
+          track_title: track.title,
+          track_artist: track.artist,
+          rhymes: ratings.rhymes,
+          rhythm: ratings.rhythm,
+          style: ratings.style,
+          charisma: ratings.charisma,
+          vibe: ratings.vibe,
+          genre: track.genre || null,
+          review_text: reviewText
+        });
+        successEl.textContent = '';
+        const expGain = res.exp_gained != null ? res.exp_gained : 10;
+        const expBoxId = isDaily ? 'dailyExpGainBox' : 'ratingExpGainBox';
+        const expBox = document.getElementById(expBoxId);
+        if (expBox) {
+          expBox.innerHTML = `<p class="exp-value">+${expGain} EXP</p><p class="exp-label">Оценка засчитана! Уровень обновлён.</p>`;
+          expBox.classList.remove('hidden');
+          expBox.style.display = 'block';
+        }
+        loadUser();
+        if (!isDaily) {
+          setTimeout(() => { closeRatingOverlay(); loadMyReviews(); loadTopTracks(); }, 2200);
+        }
+      } catch (e) {
+        if (e.message === 'INIT_MISSING') {
+          errEl.textContent = 'Данные авторизации не получены. Закройте приложение и откройте снова через кнопку «Играть» в боте.';
+        } else if (e.message === 'INIT_INVALID') {
+          errEl.textContent = 'Сессия устарела. Закройте и откройте приложение заново из бота.';
+        } else if (e.message === 'TELEGRAM_REQUIRED') {
+          errEl.textContent = 'Откройте приложение из Telegram (кнопка «Играть» в боте).';
+        } else {
+          errEl.textContent = e.message || 'Ошибка отправки. Проверьте интернет.';
+        }
+      } finally {
+        btn.classList.remove('loading');
+      }
+    }
+
+    document.getElementById('submitDailyRating').addEventListener('click', () => submitRating(true));
+    document.getElementById('submitRatingBtn').addEventListener('click', () => submitRating(false));
+
+    document.querySelectorAll('.nav-item').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const panel = btn.dataset.panel;
+        document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+        btn.classList.add('active');
+        const panelEl = document.getElementById('panel' + panel);
+        if (panelEl) panelEl.classList.add('active');
+        if (panel === 'Chart') loadChart();
+        if (panel === 'Playlist') document.getElementById('playlistTracksList').innerHTML = '';
+        if (panel === 'My') { loadMyReviews(); loadFavorites(); }
+        if (panel === 'Profile') loadLeaderboard();
+      });
+    });
+
+    document.getElementById('loadPlaylistBtn').addEventListener('click', async () => {
+      const url = document.getElementById('playlistUrlInput').value.trim();
+      const listEl = document.getElementById('playlistTracksList');
+      if (!url) {
+        listEl.innerHTML = '<p class="empty-state">Вставь ссылку на плейлист</p>';
+        return;
+      }
+      listEl.innerHTML = '<p style="color:var(--text-muted); padding:16px;">Загрузка…</p>';
+      try {
+        const data = await api('/tracks/playlist?url=' + encodeURIComponent(url) + '&limit=50');
+        const tracks = data.tracks || [];
+        if (tracks.length === 0) {
+          listEl.innerHTML = '<p class="empty-state">Не удалось загрузить или плейлист пуст</p>';
+          return;
+        }
+        renderTrackList('playlistTracksList', tracks, { showBadge: false });
+      } catch (_) {
+        listEl.innerHTML = '<p class="empty-state">Ошибка загрузки плейлиста</p>';
+      }
+    });
+
+    document.querySelectorAll('.my-tab').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.my-tab').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        const block = btn.dataset.my;
+        document.getElementById('myReviewsBlock').style.display = block === 'reviews' ? 'block' : 'none';
+        document.getElementById('myFavoritesBlock').style.display = block === 'favorites' ? 'block' : 'none';
+        if (block === 'favorites') loadFavorites();
+      });
+    });
+
+    document.getElementById('helpCloseBtn').addEventListener('click', () => {
+      if (document.getElementById('helpDontShow').checked) {
+        try { localStorage.setItem('miniapp_help_seen', '1'); } catch (_) {}
+      }
+      document.getElementById('helpOverlay').classList.add('hidden');
+      document.body.classList.remove('help-overlay-open');
+    });
+
+    (async () => {
+      await loadCriteria();
+      await loadUser();
+      await loadDaily();
+      await loadTopTracks();
+    })();
+  </script>
+</body>
+</html>

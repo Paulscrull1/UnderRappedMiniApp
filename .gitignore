@@ -34,3 +34,7 @@ htmlcov/
 # OS
 .DS_Store
 Thumbs.db
+
+# Tunnel binary (скачивается отдельно, см. MINIAPP.md)
+cloudflared.exe
+cloudflared

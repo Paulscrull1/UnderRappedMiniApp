@@ -1,10 +1,16 @@
 # keyboards.py
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
+import config
 
 
 def main_menu():
     """Главное меню (используется при пустых списках и т.д.)"""
-    keyboard = [
+    keyboard = []
+    if config.MINI_APP_URL:
+        keyboard.append([
+            InlineKeyboardButton("🎮 Играть", web_app=WebAppInfo(url=config.MINI_APP_URL)),
+        ])
+    keyboard.extend([
         [InlineKeyboardButton("👤 Профиль", callback_data="show_profile")],
         [InlineKeyboardButton("🏆 Лидерборд", callback_data="show_leaderboard")],
         [InlineKeyboardButton("🌞 Трек дня", callback_data="show_daily_track")],
@@ -16,7 +22,7 @@ def main_menu():
         [InlineKeyboardButton("📋 Моя статистика", callback_data="view_reviews")],
         [InlineKeyboardButton("🌍 Общая статистика", callback_data="view_global_reviews")],
         [InlineKeyboardButton("🏆 Топ треков", callback_data="show_top_tracks")],
-    ]
+    ])
     return InlineKeyboardMarkup(keyboard)
 
 
