@@ -22,6 +22,7 @@ def main_menu():
         [InlineKeyboardButton("📋 Моя статистика", callback_data="view_reviews")],
         [InlineKeyboardButton("🌍 Общая статистика", callback_data="view_global_reviews")],
         [InlineKeyboardButton("🏆 Топ треков", callback_data="show_top_tracks")],
+        [InlineKeyboardButton("👥 Пригласить друзей", callback_data="invite_friends")],
     ])
     return InlineKeyboardMarkup(keyboard)
 

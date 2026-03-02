@@ -17,3 +17,6 @@ STORAGE_CHAT_ID = os.environ.get("STORAGE_CHAT_ID", "").strip() or None
 
 # URL Mini App (HTTPS). Для разработки: ngrok или другой туннель.
 MINI_APP_URL = os.environ.get("MINI_APP_URL", "").strip() or None
+
+# Username бота без @ (для ссылок «Поделиться»). Добавь в .env: BOT_USERNAME=YourBotUsername
+BOT_USERNAME = os.environ.get("BOT_USERNAME", "").strip() or None

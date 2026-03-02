@@ -5,9 +5,10 @@ from telegram.ext import (
     CommandHandler,
     MessageHandler,
     CallbackQueryHandler,
+    InlineQueryHandler,
     filters,
 )
-from telegram import Update
+from telegram import Update, InlineQueryResultArticle, InputTextMessageContent
 from telegram.ext import ContextTypes
 from telegram.request import HTTPXRequest
 import config
@@ -38,7 +39,7 @@ from handlers.track_card_handler import (
     handle_fav_toggle,
     handle_download_track,
 )
-from handlers.commands_handler import cmd_chart, cmd_daily, cmd_stats, cmd_search, cmd_info
+from handlers.commands_handler import cmd_chart, cmd_daily, cmd_stats, cmd_search, cmd_info, invite_friends
 from handlers.playlist_handler import start_playlist, handle_playlist_link, show_playlist_page
 from handlers.profile_handler import (
     show_profile,
@@ -57,6 +58,7 @@ from handlers.profile_handler import (
     handle_profile_description_text,
 )
 from handlers.web_handler import webapp_handler
+from handlers.inline_handler import inline_search
 from database import init_db, add_exp
 from utils import user_states, EXP_FOR_REVIEW
 from keyboards import after_review_buttons
@@ -141,6 +143,7 @@ def main():
     app.add_handler(CommandHandler("daily", cmd_daily))
     app.add_handler(CommandHandler("stats", cmd_stats))
     app.add_handler(CommandHandler("search", cmd_search))
+    app.add_handler(CommandHandler("invite", invite_friends))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     app.add_handler(MessageHandler(filters.PHOTO, handle_profile_photo))
 
@@ -201,6 +204,10 @@ def main():
 
     # Навигация и служебные
     app.add_handler(CallbackQueryHandler(back_to_menu, pattern="^back_to_menu$"))
+    app.add_handler(CallbackQueryHandler(lambda u, c: invite_friends(u, c), pattern="^invite_friends$"))
+
+    # Inline режим: @bot <запрос>
+    app.add_handler(InlineQueryHandler(inline_search))
     app.add_handler(CallbackQueryHandler(_noop_callback, pattern="^noop$"))
 
     # Mini App

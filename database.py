@@ -37,7 +37,7 @@ def init_db():
         )
     ''')
 
-    # Таблица пользователей: никнейм, профиль (аватар, описание, закреплённый трек)
+    # Таблица пользователей: никнейм, профиль (аватар, описание, закреплённый трек, реферал)
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS users (
             user_id INTEGER PRIMARY KEY,
@@ -56,6 +56,9 @@ def init_db():
         ("pinned_track_id", "ALTER TABLE users ADD COLUMN pinned_track_id TEXT"),
         ("pinned_track_title", "ALTER TABLE users ADD COLUMN pinned_track_title TEXT"),
         ("pinned_track_artist", "ALTER TABLE users ADD COLUMN pinned_track_artist TEXT"),
+        ("avatar_emoji", "ALTER TABLE users ADD COLUMN avatar_emoji TEXT"),
+        ("avatar_url", "ALTER TABLE users ADD COLUMN avatar_url TEXT"),
+        ("referrer_id", "ALTER TABLE users ADD COLUMN referrer_id INTEGER"),
     ]:
         if col_name not in users_cols:
             cursor.execute(col_def)
@@ -118,6 +121,47 @@ def init_db():
         )
     ''')
 
+    # Достижения (игровая система поощрений)
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS achievements (
+            key TEXT PRIMARY KEY,
+            name_ru TEXT NOT NULL,
+            description_ru TEXT NOT NULL,
+            icon TEXT NOT NULL,
+            condition_type TEXT NOT NULL,
+            condition_value INTEGER NOT NULL
+        )
+    ''')
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS user_achievements (
+            user_id INTEGER,
+            achievement_key TEXT,
+            unlocked_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (user_id, achievement_key),
+            FOREIGN KEY (achievement_key) REFERENCES achievements(key)
+        )
+    ''')
+    # Красивые достижения: запоминающиеся названия и описания
+    default_achievements = [
+        ('first_rating', 'Первый шаг', 'Поставь свою первую оценку треку', '🌱', 'reviews_count', 1),
+        ('reviews_5', 'Ценитель звука', 'Оцени 5 треков — ты в деле!', '🎧', 'reviews_count', 5),
+        ('reviews_10', 'Меломан', '10 оценок — твой вкус находит голос', '🎵', 'reviews_count', 10),
+        ('reviews_25', 'Звукорежиссёр', '25 треков — ты чувствуешь каждый бит', '🎚️', 'reviews_count', 25),
+        ('reviews_50', 'Легенда чартов', '50 оценок — ты знаешь музыку изнутри', '🏆', 'reviews_count', 50),
+        ('level_5', 'Восходящая звезда', 'Достигни 5 уровня', '⭐', 'level', 5),
+        ('level_10', 'Голос сообщества', '10 уровень — твоё мнение важно', '🌟', 'level', 10),
+        ('level_25', 'Мастер вкуса', '25 уровень — ты эталон для других', '👑', 'level', 25),
+    ]
+    cursor.executemany(
+        'INSERT OR IGNORE INTO achievements (key, name_ru, description_ru, icon, condition_type, condition_value) VALUES (?, ?, ?, ?, ?, ?)',
+        default_achievements,
+    )
+    for key, name_ru, desc_ru, icon, ctype, cval in default_achievements:
+        cursor.execute(
+            'UPDATE achievements SET name_ru = ?, description_ru = ?, icon = ? WHERE key = ?',
+            (name_ru, desc_ru, icon, key),
+        )
+
     conn.commit()
     conn.close()
 
@@ -171,20 +215,48 @@ def set_daily_track(track_id: str):
 
 def save_user_nickname(user_id: int, nickname: str):
     """
-    Сохраняет или обновляет никнейм пользователя
+    Сохраняет или обновляет только никнейм. Не трогает description, avatar, pinned_track.
     """
     if not nickname or len(nickname.strip()) == 0:
         return
-    nickname = nickname.strip()[:50]  # Ограничение длины
+    nickname = nickname.strip()[:50]
 
     conn = _connect()
     cursor = conn.cursor()
     cursor.execute('''
-        INSERT OR REPLACE INTO users (user_id, nickname)
-        VALUES (?, ?)
+        INSERT INTO users (user_id, nickname) VALUES (?, ?)
+        ON CONFLICT(user_id) DO UPDATE SET nickname = excluded.nickname
     ''', (user_id, nickname))
     conn.commit()
     conn.close()
+
+
+def set_referrer_if_empty(user_id: int, referrer_id: int) -> bool:
+    """
+    Устанавливает referrer_id для пользователя, если он ещё не задан.
+    Возвращает True, если значение было установлено.
+    """
+    if not referrer_id or referrer_id == user_id:
+        return False
+    conn = _connect()
+    cursor = conn.cursor()
+    cursor.execute('SELECT referrer_id FROM users WHERE user_id = ?', (user_id,))
+    row = cursor.fetchone()
+    if row and row[0] is not None:
+        conn.close()
+        return False
+    cursor.execute(
+        'INSERT INTO users (user_id, nickname) VALUES (?, ?) ON CONFLICT(user_id) DO NOTHING',
+        (user_id, get_user_nickname(user_id) or f'User_{user_id}'),
+    )
+    cursor.execute(
+        'UPDATE users SET referrer_id = ? WHERE user_id = ? AND (referrer_id IS NULL)',
+        (referrer_id, user_id),
+    )
+    changed = cursor.rowcount > 0
+    conn.commit()
+    conn.close()
+    return changed
 
 
 def get_user_nickname(user_id: int) -> str:
@@ -206,7 +278,7 @@ def get_profile(user_id: int) -> dict:
     conn = _connect()
     cursor = conn.cursor()
     cursor.execute(
-        'SELECT nickname, avatar_file_id, description, pinned_track_id, pinned_track_title, pinned_track_artist '
+        'SELECT nickname, avatar_file_id, description, pinned_track_id, pinned_track_title, pinned_track_artist, avatar_emoji, avatar_url '
         'FROM users WHERE user_id = ?',
         (user_id,),
     )
@@ -221,6 +293,8 @@ def get_profile(user_id: int) -> dict:
         'pinned_track_id': row[3],
         'pinned_track_title': row[4],
         'pinned_track_artist': row[5],
+        'avatar_emoji': row[6] if len(row) > 6 else None,
+        'avatar_url': row[7] if len(row) > 7 else None,
     }
 
 
@@ -245,6 +319,48 @@ def update_profile_description(user_id: int, description: str):
         (user_id, get_user_nickname(user_id) or f'User_{user_id}'),
     )
     cursor.execute('UPDATE users SET description = ? WHERE user_id = ?', (description, user_id))
+    conn.commit()
+    conn.close()
+
+
+def update_profile_avatar_emoji(user_id: int, emoji: str):
+    """Установить аватар-эмодзи (один символ или короткая строка, напр. 🎸)."""
+    emoji = (emoji or '').strip()[:10]
+    conn = _connect()
+    cursor = conn.cursor()
+    cursor.execute(
+        'INSERT INTO users (user_id, nickname) VALUES (?, ?) ON CONFLICT(user_id) DO NOTHING',
+        (user_id, get_user_nickname(user_id) or f'User_{user_id}'),
+    )
+    cursor.execute('UPDATE users SET avatar_emoji = ? WHERE user_id = ?', (emoji or None, user_id))
+    conn.commit()
+    conn.close()
+
+
+def update_profile_avatar_url(user_id: int, url: str):
+    """Сохранить URL загруженного аватара (путь вида /avatars/123.jpg). Сбрасывает avatar_emoji."""
+    conn = _connect()
+    cursor = conn.cursor()
+    cursor.execute(
+        'INSERT INTO users (user_id, nickname) VALUES (?, ?) ON CONFLICT(user_id) DO NOTHING',
+        (user_id, get_user_nickname(user_id) or f'User_{user_id}'),
+    )
+    cursor.execute(
+        'UPDATE users SET avatar_url = ?, avatar_emoji = NULL WHERE user_id = ?',
+        (url or None, user_id),
+    )
+    conn.commit()
+    conn.close()
+
+
+def clear_profile_avatar_custom(user_id: int):
+    """Сбросить свой аватар (эмодзи и загруженное фото) — будет показано фото из Telegram."""
+    conn = _connect()
+    cursor = conn.cursor()
+    cursor.execute(
+        'UPDATE users SET avatar_emoji = NULL, avatar_url = NULL WHERE user_id = ?',
+        (user_id,),
+    )
     conn.commit()
     conn.close()
 
@@ -506,6 +622,7 @@ def add_exp(user_id: int, amount: int):
     ''', (user_id, amount, amount))
     conn.commit()
     conn.close()
+    _check_achievements(user_id)
 
 
 def get_recent_reviews_with_text(limit=5):
@@ -548,12 +665,13 @@ def get_user_progress(user_id: int):
 
 def get_leaderboard(limit: int = 20):
     """
-    Лидерборд по EXP: user_id, nickname, exp, level.
+    Лидерборд по EXP: user_id, nickname, exp, level, avatar_url, avatar_emoji, description (профиль).
     """
     conn = _connect()
     cursor = conn.cursor()
     cursor.execute('''
-        SELECT p.user_id, COALESCE(u.nickname, 'Пользователь ' || p.user_id), p.exp
+        SELECT p.user_id, COALESCE(u.nickname, 'Пользователь ' || p.user_id), p.exp,
+               u.avatar_url, u.avatar_emoji, u.description
         FROM user_progress p
         LEFT JOIN users u ON u.user_id = p.user_id
         ORDER BY p.exp DESC
@@ -562,6 +680,76 @@ def get_leaderboard(limit: int = 20):
     rows = cursor.fetchall()
     conn.close()
     return [
-        {'user_id': r[0], 'nickname': r[1] or f'User_{r[0]}', 'exp': r[2], 'level': 1 + r[2] // 100}
+        {
+            'user_id': r[0],
+            'nickname': r[1] or f'User_{r[0]}',
+            'exp': r[2],
+            'level': 1 + r[2] // 100,
+            'avatar_url': r[3] if len(r) > 3 else None,
+            'avatar_emoji': r[4] if len(r) > 4 else None,
+            'description': (r[5] or '').strip() if len(r) > 5 else '',
+        }
         for r in rows
     ]
+
+
+# --- Достижения ---
+
+def get_achievements_definitions():
+    """Список всех достижений: key, name_ru, description_ru, icon, condition_type, condition_value."""
+    conn = _connect()
+    cursor = conn.cursor()
+    cursor.execute('SELECT key, name_ru, description_ru, icon, condition_type, condition_value FROM achievements ORDER BY condition_type, condition_value')
+    rows = cursor.fetchall()
+    conn.close()
+    return [
+        {'key': r[0], 'name_ru': r[1], 'description_ru': r[2], 'icon': r[3], 'condition_type': r[4], 'condition_value': r[5]}
+        for r in rows
+    ]
+
+
+def get_user_achievements(user_id: int):
+    """Ключи разблокированных достижений пользователя."""
+    conn = _connect()
+    cursor = conn.cursor()
+    cursor.execute('SELECT achievement_key FROM user_achievements WHERE user_id = ?', (user_id,))
+    rows = cursor.fetchall()
+    conn.close()
+    return [r[0] for r in rows]
+
+
+def unlock_achievement(user_id: int, achievement_key: str) -> bool:
+    """Разблокирует достижение, если ещё не разблокировано. Возвращает True если только что разблокировано."""
+    conn = _connect()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            'INSERT OR IGNORE INTO user_achievements (user_id, achievement_key) VALUES (?, ?)',
+            (user_id, achievement_key),
+        )
+        conn.commit()
+        return cursor.rowcount > 0
+    finally:
+        conn.close()
+
+
+def _check_achievements(user_id: int):
+    """Проверяет условия достижений и разблокирует подходящие (по уровню и количеству оценок)."""
+    progress = get_user_progress(user_id)
+    level = progress['level']
+    conn = _connect()
+    cursor = conn.cursor()
+    cursor.execute('SELECT COUNT(*) FROM reviews WHERE user_id = ?', (user_id,))
+    reviews_count = cursor.fetchone()[0]
+    conn.close()
+    unlocked = set(get_user_achievements(user_id))
+    for ach in get_achievements_definitions():
+        if ach['key'] in unlocked:
+            continue
+        ok = False
+        if ach['condition_type'] == 'level' and level >= ach['condition_value']:
+            ok = True
+        if ach['condition_type'] == 'reviews_count' and reviews_count >= ach['condition_value']:
+            ok = True
+        if ok:
+            unlock_achievement(user_id, ach['key'])

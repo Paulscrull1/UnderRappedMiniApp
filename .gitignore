@@ -38,3 +38,6 @@ Thumbs.db
 # Tunnel binary (скачивается отдельно, см. MINIAPP.md)
 cloudflared.exe
 cloudflared
+
+# Загруженные аватарки пользователей
+avatars/

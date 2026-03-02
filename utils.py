@@ -23,6 +23,7 @@ MAX_SCORE = 50
 EXP_FOR_RATING = 10
 EXP_FOR_REVIEW = 15
 EXP_FOR_FAVORITE = 5
+EXP_FOR_REFERRAL = 25
 
 # Глобальное хранилище для сопоставления хэш → track_id
 hash_to_track_id = {}

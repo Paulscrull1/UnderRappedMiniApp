@@ -115,3 +115,32 @@ async def cmd_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     user_id = update.message.from_user.id
     await send_track_card(update.message, tracks[0]["id"], user_id, track_dict=tracks[0])
+
+
+async def invite_friends(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Показывает персональную реферальную ссылку для приглашения друзей.
+    """
+    user = update.effective_user
+    if not user:
+        return
+    user_id = user.id
+    bot_username = (context.bot.username or "").lstrip("@")
+    if not bot_username:
+        await update.effective_message.reply_text(
+            "Реферальная ссылка пока недоступна. Бот не знает своё имя."
+        )
+        return
+    ref_link = f"https://t.me/{bot_username}?start=ref_{user_id}"
+    text = (
+        "👥 *Пригласи друзей в игру!*\n\n"
+        "Отправь эту ссылку друзьям — когда они зайдут и создадут профиль, "
+        "ты получишь дополнительный опыт в игре.\n\n"
+        f"`{ref_link}`"
+    )
+    buttons = [[InlineKeyboardButton("📤 Отправить ссылку", url=ref_link)]]
+    await update.effective_message.reply_text(
+        text,
+        reply_markup=InlineKeyboardMarkup(buttons),
+        parse_mode="Markdown",
+    )
