@@ -387,13 +387,23 @@ def clear_pinned_track(user_id: int):
     conn.close()
 
 
+def user_has_reviewed(user_id, track_id):
+    """True, если пользователь уже оценивал этот трек (тогда при повторной оценке EXP не начисляем)."""
+    conn = _connect()
+    cursor = conn.cursor()
+    cursor.execute('SELECT 1 FROM reviews WHERE user_id = ? AND track_id = ?', (user_id, track_id))
+    row = cursor.fetchone()
+    conn.close()
+    return row is not None
+
+
 def save_review(user_id, track_id, ratings, track_title, track_artist, nickname, genre=None, review_text=None):
     """
-    Сохраняет оценку трека и начисляет EXP.
+    Сохраняет или обновляет оценку трека. EXP начисляется только при первой оценке трека.
     """
     total = sum(ratings.values())
+    already_rated = user_has_reviewed(user_id, track_id)
 
-    # Используем постоянный ник из БД, если есть; иначе — переданный
     final_nickname = get_user_nickname(user_id) or nickname or f"Пользователь {user_id}"
 
     conn = _connect()
@@ -412,8 +422,9 @@ def save_review(user_id, track_id, ratings, track_title, track_artist, nickname,
     conn.commit()
     conn.close()
 
-    from utils import EXP_FOR_RATING
-    add_exp(user_id, EXP_FOR_RATING)
+    if not already_rated:
+        from utils import EXP_FOR_RATING
+        add_exp(user_id, EXP_FOR_RATING)
 
 
 def get_last_reviews(user_id, limit=10):

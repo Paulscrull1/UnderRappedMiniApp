@@ -24,6 +24,7 @@ from database import (
     get_profile,
     get_leaderboard,
     save_review,
+    user_has_reviewed,
     get_last_reviews,
     get_favorites,
     add_favorite,
@@ -568,6 +569,7 @@ def post_review(
     }
     total = sum(ratings.values())
 
+    was_first_time = not user_has_reviewed(user_id, payload.track_id)
     unlocked_before = set(get_user_achievements(user_id))
     save_review(
         user_id=user_id,
@@ -587,10 +589,11 @@ def post_review(
             if a["key"] == new_achievement:
                 ach_detail = {"key": a["key"], "name_ru": a["name_ru"], "icon": a["icon"]}
                 break
+    exp_gained = 10 if was_first_time else 0
     return {
         "ok": True,
         "total": total,
-        "exp_gained": 10,
+        "exp_gained": exp_gained,
         "achievement_unlocked": ach_detail,
     }
 

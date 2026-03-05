@@ -27,17 +27,19 @@ async def inline_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
         title = t.get("title") or "Без названия"
         artist = t.get("artist") or "Неизвестен"
         text = f"{title} — {artist}"
-        # При выборе отправляем сообщение с deep-link на бота
-        # Пользователь в чате увидит текст, а по ссылке откроет бота в режиме оценки этого трека.
         from urllib.parse import quote
 
         safe_id = str(track_id).replace(":", "_")
         bot_username = (context.bot.username or "").lstrip("@")
         if not bot_username:
-            link = f"https://t.me/"
+            bot_link = "https://t.me/"
         else:
-            link = f"https://t.me/{bot_username}?start=track_{quote(safe_id, safe='')}"
-        message_text = f"🎵 {text}\n\nОценить трек в игре: {link}"
+            bot_link = f"https://t.me/{bot_username}?start=track_{quote(safe_id, safe='')}"
+        yandex_url = (t.get("track_url") or "").strip()
+        if yandex_url:
+            message_text = f"🎵 {text}\n\n▶ Слушать в Яндекс.Музыке: {yandex_url}\n\nОценить в игре: {bot_link}"
+        else:
+            message_text = f"🎵 {text}\n\nОценить в игре: {bot_link}"
         results.append(
             InlineQueryResultArticle(
                 id=hash_id(track_id),
