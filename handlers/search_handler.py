@@ -1,20 +1,35 @@
 # handlers/search_handler.py
 from telegram import Update
 from telegram.ext import ContextTypes
-from yandex import search_track
+
+from music_providers import search_tracks
 from database import save_review
 from keyboards import rating_buttons, after_review_buttons, back_to_menu_button
 from utils import user_states, CRITERIA_NAMES
 from handlers.track_card_handler import send_track_card
 
+SEARCH_STAGE = "awaiting_search_query"
+
 
 async def start_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработка start_search_yandex и start_search_soundcloud: показ подсказки и сохранение источника."""
     query = update.callback_query
     await query.answer()
+    data = (query.data or "").strip()
+    if data == "start_search_yandex":
+        source = "yandex"
+        label = "Яндекс.Музыке"
+    elif data == "start_search_soundcloud":
+        source = "soundcloud"
+        label = "SoundCloud"
+    else:
+        return
+    user_id = query.from_user.id
+    user_states[user_id] = {"stage": SEARCH_STAGE, "source": source}
     await query.edit_message_reply_markup(reply_markup=None)
     await query.message.reply_text(
-        "🔍 *Поиск трека*\n\n"
-        "Напиши в формате:\n*Исполнитель — Название трека*\n\n"
+        f"🔍 *Поиск в {label}*\n\n"
+        "Напиши запрос в чат (исполнитель, название трека или любой текст).\n\n"
         "Пример: `Платина — Бассок`",
         parse_mode="Markdown",
         reply_markup=back_to_menu_button(),
@@ -22,22 +37,27 @@ async def start_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.message.text.strip()
-    if query.startswith('/'):
-        return
-
+    """Выполняет поиск по выбранному источнику (yandex или soundcloud). Вызывается из handle_message при stage=awaiting_search_query."""
+    user_id = update.message.from_user.id
+    state = user_states.get(user_id, {})
+    if state.get("stage") != SEARCH_STAGE:
+        return False
+    source = state.get("source", "yandex")
+    query_text = update.message.text.strip()
+    if query_text.startswith("/"):
+        return True
+    # Сбрасываем состояние сразу, чтобы следующий ввод не считался поиском
+    del user_states[user_id]
     await update.message.reply_text("🔍 Ищу трек...")
-    tracks = search_track(query, limit=1)
-
+    tracks = search_tracks(query_text, limit=5, sources=(source,))
     if not tracks:
         await update.message.reply_text(
-            "❌ Не нашёл такой трек. Попробуй уточнить:\nИсполнитель — Название",
+            "❌ Ничего не найдено. Попробуй другой запрос.",
             reply_markup=back_to_menu_button(),
         )
-        return
-
-    user_id = update.message.from_user.id
+        return True
     await send_track_card(update.message, tracks[0]["id"], user_id, track_dict=tracks[0])
+    return True
 
 
 async def handle_rating_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):

@@ -15,9 +15,10 @@ def main_menu():
         [InlineKeyboardButton("🏆 Лидерборд", callback_data="show_leaderboard")],
         [InlineKeyboardButton("🌞 Трек дня", callback_data="show_daily_track")],
         [InlineKeyboardButton("📊 Чарт Яндекс Музыки", callback_data="show_chart")],
-        [InlineKeyboardButton("🎧 Найти трек", callback_data="start_search")],
+        [InlineKeyboardButton("🔍 Поиск в Яндекс.Музыке", callback_data="start_search_yandex")],
+        [InlineKeyboardButton("🔍 Поиск в SoundCloud", callback_data="start_search_soundcloud")],
         [InlineKeyboardButton("📑 Треки из плейлиста", callback_data="start_playlist")],
-        [InlineKeyboardButton("🤍 Моё избранное", callback_data="view_favorites")],
+        [InlineKeyboardButton("🎵 Мой плейлист", callback_data="view_favorites")],
         [InlineKeyboardButton("📥 Мои скачанные", callback_data="view_downloads")],
         [InlineKeyboardButton("📋 Моя статистика", callback_data="view_reviews")],
         [InlineKeyboardButton("🌍 Общая статистика", callback_data="view_global_reviews")],
@@ -68,7 +69,7 @@ def profile_edit_buttons():
 
 
 def profile_pin_track_buttons(tracks, page=0, per_page=8):
-    """Список треков для закрепления: из оценок/избранного. callback pin_track_{hash}."""
+    """Список треков для закрепления: из оценок и плейлиста. callback pin_track_{hash}."""
     from utils import hash_id, hash_to_track_id
     start = page * per_page
     chunk = tracks[start : start + per_page]
@@ -126,7 +127,7 @@ def back_to_list_button(back_callback: str):
 
 def after_review_buttons(track_id=None):
     """
-    Кнопки после оценки: написать рецензию, скачать, избранное, назад.
+    Кнопки после оценки: написать рецензию, скачать, плейлист, назад.
     track_id — для ask_review_ и favorite_ (передаётся как hash).
     """
     from utils import hash_id, hash_to_track_id
@@ -141,28 +142,33 @@ def after_review_buttons(track_id=None):
     return InlineKeyboardMarkup(buttons)
 
 
-def track_card_buttons(track_id: str, track_url: str, in_favorites: bool):
+def track_card_buttons(track_id: str, track_url: str, in_favorites: bool, source: str = ""):
     """
-    Клавиатура карточки трека: Оценить | Рецензия | Скачать (файл) | В избранное, Назад.
-    Скачать — callback: бот скачивает трек через API и отправляет пользователю.
+    Клавиатура карточки трека: Слушать | Оценить | Рецензия | Скачать | В плейлист, Назад.
+    Скачать доступен и для Яндекс.Музыки, и для SoundCloud.
     """
     from utils import hash_id, hash_to_track_id
     safe_hash = hash_id(track_id)
     hash_to_track_id[safe_hash] = track_id
 
+    rows = []
+    if track_url:
+        rows.append([InlineKeyboardButton("▶ Слушать", url=track_url)])
     row1 = [
         InlineKeyboardButton("⭐ Оценить", callback_data=f"rate_track_{safe_hash}"),
         InlineKeyboardButton("✍️ Рецензия", callback_data=f"ask_review_{safe_hash}"),
     ]
+    rows.append(row1)
     row2 = [
         InlineKeyboardButton("📥 Скачать", callback_data=f"download_track_{safe_hash}"),
         InlineKeyboardButton(
-            "❤️ Убрать из избранного" if in_favorites else "🤍 В избранное",
+            "❤️ Убрать из плейлиста" if in_favorites else "🤍 В плейлист",
             callback_data=f"fav_toggle_{safe_hash}"
         ),
     ]
-    row3 = [InlineKeyboardButton("🔙 Назад в меню", callback_data="back_to_menu")]
-    return InlineKeyboardMarkup([row1, row2, row3])
+    rows.append(row2)
+    rows.append([InlineKeyboardButton("🔙 Назад в меню", callback_data="back_to_menu")])
+    return InlineKeyboardMarkup(rows)
 
 
 def chart_list_buttons(tracks):
@@ -269,7 +275,7 @@ def reviews_list_buttons_paginated(reviews, page=0, per_page=None, fav_count=0):
     from utils import hash_id, hash_to_track_id
     start = page * per_page
     chunk = reviews[start : start + per_page]
-    fav_label = f"🤍 Моё избранное ({fav_count})" if fav_count is not None else "🤍 Моё избранное"
+    fav_label = f"🎵 Мой плейлист ({fav_count})" if fav_count is not None else "🎵 Мой плейлист"
     buttons = [[InlineKeyboardButton(fav_label, callback_data="view_favorites")]]
     for r in chunk:
         safe_hash = hash_id(r["track_id"])

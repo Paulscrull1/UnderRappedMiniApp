@@ -148,6 +148,66 @@
     }
     .nav-item .icon { font-size: 1.4rem; }
 
+    /* Нижняя панель плеера — над навбаром */
+    #playerBar {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: calc(var(--nav-height) + var(--safe-bottom));
+      z-index: 19;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 16px;
+      padding-left: calc(16px + var(--safe-left));
+      padding-right: calc(16px + var(--safe-right));
+      padding-bottom: calc(10px + var(--safe-bottom));
+      background: rgba(10,10,15,0.95);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border-top: 1px solid var(--card-border);
+      box-shadow: 0 -4px 20px rgba(0,0,0,0.3);
+    }
+    #playerBar.hidden { display: none !important; }
+    #playerBar .player-bar-cover {
+      width: 48px;
+      height: 48px;
+      border-radius: 10px;
+      object-fit: cover;
+      flex-shrink: 0;
+      background: var(--bg-card);
+      border: 1px solid var(--card-border);
+    }
+    #playerBar .player-bar-info { flex: 1; min-width: 0; }
+    #playerBar .player-bar-title { font-size: 0.9rem; font-weight: 700; margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    #playerBar .player-bar-artist { font-size: 0.78rem; color: var(--text-muted); margin: 2px 0 0 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    #playerBar .player-bar-controls {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    #playerBar .player-bar-controls button {
+      width: 40px;
+      height: 40px;
+      border: none;
+      border-radius: 50%;
+      background: var(--bg-card);
+      color: var(--text);
+      font-size: 1.1rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.2s, transform 0.1s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    #playerBar .player-bar-controls button:active { transform: scale(0.95); }
+    #playerBar .player-bar-controls button:hover { background: var(--bg-card-hover); }
+    #playerBar .player-bar-controls button#playerPlayPause { background: var(--accent-dim); color: var(--accent-bright); }
+    #playerBar .player-volume-wrap { display: flex; align-items: center; gap: 4px; width: 52px; min-width: 52px; flex-shrink: 0; }
+    #playerBar .player-volume-wrap label { font-size: 0.75rem; color: var(--text-muted); }
+    #playerBar .player-volume-wrap input[type="range"] { width: 100%; max-width: 36px; height: 5px; accent-color: var(--accent); background: var(--bg-card); border-radius: 3px; }
+
     .panel { display: none; }
     .panel.active { display: block; animation: fadeIn 0.3s ease; }
     @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
@@ -597,6 +657,13 @@
       body { padding-left: 0; padding-right: 0; }
       .app-header { margin-left: 0; margin-right: 0; padding-left: 20px; padding-right: 20px; }
       .main { padding-left: 20px; padding-right: 20px; }
+      #playerBar {
+        left: 50%;
+        right: auto;
+        width: 100%;
+        max-width: 520px;
+        transform: translateX(-50%);
+      }
       .bottom-nav {
         left: 50%;
         right: auto;
@@ -610,6 +677,24 @@
   </style>
 </head>
 <body>
+  <audio id="appPlayer"></audio>
+  <!-- Панель плеера: обложка, название, артист, prev / play-pause / next, громкость -->
+  <div id="playerBar" class="hidden">
+    <img id="playerCover" class="player-bar-cover" src="" alt="" onerror="this.style.display='none'">
+    <div class="player-bar-info">
+      <p id="playerTitle" class="player-bar-title">—</p>
+      <p id="playerArtist" class="player-bar-artist">—</p>
+    </div>
+    <div class="player-bar-controls">
+      <button type="button" id="playerPrev" title="Предыдущий">⏮</button>
+      <button type="button" id="playerPlayPause" title="Старт/пауза">▶</button>
+      <button type="button" id="playerNext" title="Следующий">⏭</button>
+    </div>
+    <div class="player-volume-wrap" title="Громкость">
+      <span aria-hidden="true">🔊</span>
+      <input type="range" id="playerVolume" min="0" max="1" step="0.05" value="1">
+    </div>
+  </div>
   <!-- Справка при первом запуске (по умолчанию видна; скрывается скриптом ниже, если пользователь уже видел) -->
   <div id="helpOverlay" class="help-overlay">
     <div class="help-card">
@@ -620,7 +705,7 @@
         <li><strong>Чарт</strong> — хиты Яндекс.Музыки</li>
         <li><strong>Поиск</strong> — найдите трек по названию или исполнителю</li>
         <li><strong>Плейлист</strong> — загрузите треки по ссылке из Яндекса</li>
-        <li><strong>Моё</strong> — ваши оценки и избранное</li>
+        <li><strong>Моё</strong> — ваши оценки и плейлист</li>
         <li><strong>Профиль</strong> — уровень, прогресс и лидерборд</li>
       </ul>
       <label class="help-dont-show"><input type="checkbox" id="helpDontShow"> Больше не показывать</label>
@@ -665,21 +750,34 @@
 
     <!-- Search -->
     <section id="panelSearch" class="panel">
+      <p class="section-title">Поиск в Яндекс.Музыке</p>
       <div class="search-wrap">
         <div class="search-box">
-          <input type="text" class="search-input" id="searchInput" placeholder="Исполнитель или трек..." autocomplete="off">
+          <input type="text" class="search-input" id="searchInputYandex" placeholder="Исполнитель или трек..." autocomplete="off">
         </div>
       </div>
-      <div id="searchResults"></div>
+      <div id="searchResultsYandex"></div>
+      <p class="section-title" style="margin-top: 24px;">Поиск в SoundCloud</p>
+      <div class="search-wrap">
+        <div class="search-box">
+          <input type="text" class="search-input" id="searchInputSoundcloud" placeholder="Исполнитель или трек..." autocomplete="off">
+        </div>
+      </div>
+      <div id="searchResultsSoundcloud"></div>
     </section>
 
     <!-- My -->
     <section id="panelMy" class="panel">
       <div class="tabs-inner">
         <button type="button" class="my-tab active" data-my="reviews">Мои оценки</button>
-        <button type="button" class="my-tab" data-my="favorites">Избранное</button>
+        <button type="button" class="my-tab" data-my="favorites">Мой плейлист</button>
       </div>
       <div id="myReviewsBlock">
+        <div class="search-wrap" style="margin-bottom:8px;">
+          <div class="search-box">
+            <input type="text" class="search-input" id="myReviewsSearchInput" placeholder="Поиск по моим оценкам..." autocomplete="off">
+          </div>
+        </div>
         <div id="myReviewsList"></div>
       </div>
       <div id="myFavoritesBlock" style="display: none;">
@@ -1007,6 +1105,7 @@
       try {
         const track = await api('/tracks/daily');
         dailyTrack = track;
+        window.__playerListContext = { containerId: 'dailyCard', tracks: [normalizeTrack(track)] };
         const dailyExpBox = document.getElementById('dailyExpGainBox');
         if (dailyExpBox) { dailyExpBox.classList.add('hidden'); dailyExpBox.style.display = 'none'; }
         const trackId = track.id || track.track_id || '';
@@ -1017,9 +1116,12 @@
             <p class="daily-hero-artist">${escapeHtml(track.artist)}</p>
             <div class="daily-buttons">
               <a href="${escapeHtml(track.track_url || '#')}" target="_blank" class="btn">▶ Слушать</a>
+              <button type="button" class="btn btn-outline" id="dailyPlayInAppBtn">▶ В плеере</button>
               <div id="dailyFavoriteWrap"></div>
             </div>
           </div>`;
+        const dailyPlayBtn = document.getElementById('dailyPlayInAppBtn');
+        if (dailyPlayBtn) dailyPlayBtn.addEventListener('click', () => setQueueAndPlay(dailyTrack));
         document.getElementById('dailyRatingCard').style.display = 'block';
         if (!criteriaConfig.criteria || criteriaConfig.criteria.length === 0) await loadCriteria();
         renderCriteria('dailyCriteriaList', 'daily');
@@ -1029,7 +1131,7 @@
             const inFav = check.in_favorites === true;
             const wrap = document.getElementById('dailyFavoriteWrap');
             if (wrap) {
-              wrap.innerHTML = `<button type="button" class="btn btn-outline btn-fav" id="dailyFavBtn">${inFav ? '❤️ В избранном' : '🤍 В избранное'}</button>`;
+          wrap.innerHTML = `<button type="button" class="btn btn-outline btn-fav" id="dailyFavBtn">${inFav ? '❤️ В плейлисте' : '🤍 В плейлист'}</button>`;
               document.getElementById('dailyFavBtn').addEventListener('click', () => toggleDailyFavorite(inFav));
             }
           } catch (_) {}
@@ -1050,7 +1152,7 @@
           return;
         }
         el.innerHTML = tracks.map(t => `
-          <a class="track-card" href="#" data-track-id="${escapeHtml(t.track_id || '')}" data-title="${escapeHtml(t.title || '')}" data-artist="${escapeHtml(t.artist || '')}" data-cover="${escapeHtml(t.cover_url||'')}" data-genre="${escapeHtml(t.genre||'')}" data-url="${escapeHtml(t.track_url||'')}">
+          <a class="track-card" href="#" data-track-id="${escapeHtml(t.track_id || '')}" data-title="${escapeHtml(t.title || '')}" data-artist="${escapeHtml(t.artist || '')}" data-cover="${escapeHtml(t.cover_url||'')}" data-genre="${escapeHtml(t.genre||'')}" data-url="${escapeHtml(t.track_url||'')}" data-source="${escapeHtml(t.source||'')}">
             <img class="track-card-cover" src="${escapeHtml(t.cover_url||'')}" alt="" onerror="this.style.display='none'">
             <div class="track-card-info">
               <p class="track-card-title">${escapeHtml(t.title || 'Без названия')}</p>
@@ -1058,8 +1160,12 @@
             </div>
             <span class="track-card-badge">${t.avg_score != null ? t.avg_score : 0}/50</span>
           </a>`).join('');
+        window.__playerListContext = { containerId: 'topTracksList', tracks: tracks.map(normalizeTrack) };
         el.querySelectorAll('.track-card').forEach(a => {
-          a.addEventListener('click', (e) => { e.preventDefault(); openRateTrack(a.dataset); });
+          a.addEventListener('click', (e) => {
+            e.preventDefault();
+            openRateTrack(a.dataset);
+          });
         });
       } catch (_) {
         el.innerHTML = '<p class="empty-state">Не удалось загрузить</p>';
@@ -1076,7 +1182,7 @@
       try {
         if (currentInFav) {
           await apiDelete('/user/favorites/' + encodeURIComponent(trackId));
-          btn.textContent = '🤍 В избранное';
+          btn.textContent = '🤍 В плейлист';
           dailyTrack._inFav = false;
         } else {
           await apiPost('/user/favorites', {
@@ -1084,7 +1190,7 @@
             track_title: dailyTrack.title,
             track_artist: dailyTrack.artist
           });
-          btn.textContent = '❤️ В избранном';
+          btn.textContent = '❤️ В плейлисте';
           dailyTrack._inFav = true;
         }
         const next = dailyTrack._inFav;
@@ -1101,20 +1207,26 @@
         return;
       }
       const showBadge = options.showBadge !== false;
+      const context = options.context || '';
       el.innerHTML = tracks.map(t => {
         const id = t.track_id || t.id;
         const title = t.title || t.track_title;
         const artist = t.artist || t.track_artist;
         const cover = t.cover_url || '';
+        const source = t.source || '';
         const badge = showBadge && (t.avg_score != null || t.total != null) ? `<span class="track-card-badge">${(t.avg_score ?? t.total) ?? ''}/50</span>` : '';
-        return `<a class="track-card" href="#" data-track-id="${escapeHtml(id)}" data-title="${escapeHtml(title)}" data-artist="${escapeHtml(artist)}" data-cover="${escapeHtml(cover)}" data-genre="${escapeHtml(t.genre||'')}" data-url="${escapeHtml(t.track_url||'')}">
+        return `<a class="track-card" href="#" data-track-id="${escapeHtml(id)}" data-title="${escapeHtml(title)}" data-artist="${escapeHtml(artist)}" data-cover="${escapeHtml(cover)}" data-genre="${escapeHtml(t.genre||'')}" data-url="${escapeHtml(t.track_url||'')}" data-source="${escapeHtml(source)}" data-context="${escapeHtml(context)}">
           <img class="track-card-cover" src="${escapeHtml(cover)}" alt="" onerror="this.style.display='none'">
           <div class="track-card-info"><p class="track-card-title">${escapeHtml(title)}</p><p class="track-card-artist">${escapeHtml(artist)}</p></div>
           ${badge}
         </a>`;
       }).join('');
+      window.__playerListContext = { containerId, tracks: tracks.map(normalizeTrack) };
       el.querySelectorAll('.track-card').forEach(a => {
-        a.addEventListener('click', (e) => { e.preventDefault(); openRateTrack(a.dataset); });
+        a.addEventListener('click', (e) => {
+          e.preventDefault();
+          openRateTrack(a.dataset);
+        });
       });
     }
 
@@ -1127,46 +1239,70 @@
       }
     }
 
-    let searchTimeout;
-    document.getElementById('searchInput').addEventListener('input', (e) => {
-      clearTimeout(searchTimeout);
+    let searchTimeoutYandex, searchTimeoutSoundcloud;
+    document.getElementById('searchInputYandex').addEventListener('input', (e) => {
+      clearTimeout(searchTimeoutYandex);
       const q = e.target.value.trim();
-      if (!q) { document.getElementById('searchResults').innerHTML = ''; return; }
-      searchTimeout = setTimeout(async () => {
+      if (!q) { document.getElementById('searchResultsYandex').innerHTML = ''; return; }
+      searchTimeoutYandex = setTimeout(async () => {
         try {
-          const data = await api('/tracks/search?q=' + encodeURIComponent(q) + '&limit=15');
-          renderTrackList('searchResults', data.tracks || [], { showBadge: false });
+          const data = await api('/tracks/search?q=' + encodeURIComponent(q) + '&limit=15&source=yandex');
+          renderTrackList('searchResultsYandex', data.tracks || [], { showBadge: false });
         } catch (_) {
-          document.getElementById('searchResults').innerHTML = '<p class="empty-state">Ошибка поиска</p>';
+          document.getElementById('searchResultsYandex').innerHTML = '<p class="empty-state">Ошибка поиска</p>';
+        }
+      }, 350);
+    });
+    document.getElementById('searchInputSoundcloud').addEventListener('input', (e) => {
+      clearTimeout(searchTimeoutSoundcloud);
+      const q = e.target.value.trim();
+      if (!q) { document.getElementById('searchResultsSoundcloud').innerHTML = ''; return; }
+      searchTimeoutSoundcloud = setTimeout(async () => {
+        try {
+          const data = await api('/tracks/search?q=' + encodeURIComponent(q) + '&limit=15&source=soundcloud');
+          renderTrackList('searchResultsSoundcloud', data.tracks || [], { showBadge: false });
+        } catch (_) {
+          document.getElementById('searchResultsSoundcloud').innerHTML = '<p class="empty-state">Ошибка поиска</p>';
         }
       }, 350);
     });
 
+    let myReviewsCache = [];
+
+    function renderMyReviews(list) {
+      const el = document.getElementById('myReviewsList');
+      if (!el) return;
+      if (!list || list.length === 0) {
+        el.innerHTML = '<p class="empty-state"><span class="icon">📋</span>Вы ещё не оценили ни одного трека</p>';
+        return;
+      }
+      const ratings = (r) => (r.ratings && typeof r.ratings === 'object') ? r.ratings : {};
+      el.innerHTML = list.map(r => {
+        const rt = ratings(r);
+        const title = escapeHtml(r.title || 'Без названия');
+        const artist = escapeHtml(r.artist || 'Неизвестен');
+        const tid = escapeHtml(r.track_id || '');
+        const revText = escapeHtml((r.review_text || '').toString());
+        return `<a class="track-card" href="#" data-track-id="${tid}" data-title="${title}" data-artist="${artist}" data-cover="" data-genre="" data-url="" data-rhymes="${rt.rhymes ?? ''}" data-rhythm="${rt.rhythm ?? ''}" data-style="${rt.style ?? ''}" data-charisma="${rt.charisma ?? ''}" data-vibe="${rt.vibe ?? ''}" data-review-text="${revText}">
+          <img class="track-card-cover" src="" alt="" onerror="this.style.display='none'">
+          <div class="track-card-info"><p class="track-card-title">${title}</p><p class="track-card-artist">${artist}</p></div>
+          <span class="track-card-badge">${r.total != null ? r.total : ''}/50</span>
+        </a>`;
+      }).join('');
+      window.__playerListContext = { containerId: 'myReviewsList', tracks: list.map(r => normalizeTrack({ track_id: r.track_id, title: r.title, artist: r.artist, cover_url: '', track_url: '' })) };
+      el.querySelectorAll('.track-card').forEach(a => {
+        a.addEventListener('click', (e) => {
+          e.preventDefault();
+          openRateTrack(a.dataset);
+        });
+      });
+    }
+
     async function loadMyReviews() {
       try {
         const data = await api('/user/reviews?limit=30');
-        const list = data.reviews || [];
-        const el = document.getElementById('myReviewsList');
-        if (list.length === 0) {
-          el.innerHTML = '<p class="empty-state"><span class="icon">📋</span>Вы ещё не оценили ни одного трека</p>';
-          return;
-        }
-        const ratings = (r) => (r.ratings && typeof r.ratings === 'object') ? r.ratings : {};
-        el.innerHTML = list.map(r => {
-          const rt = ratings(r);
-          const title = escapeHtml(r.title || 'Без названия');
-          const artist = escapeHtml(r.artist || 'Неизвестен');
-          const tid = escapeHtml(r.track_id || '');
-          const revText = escapeHtml((r.review_text || '').toString());
-          return `<a class="track-card" href="#" data-track-id="${tid}" data-title="${title}" data-artist="${artist}" data-cover="" data-genre="" data-url="" data-rhymes="${rt.rhymes ?? ''}" data-rhythm="${rt.rhythm ?? ''}" data-style="${rt.style ?? ''}" data-charisma="${rt.charisma ?? ''}" data-vibe="${rt.vibe ?? ''}" data-review-text="${revText}">
-            <img class="track-card-cover" src="" alt="" onerror="this.style.display='none'">
-            <div class="track-card-info"><p class="track-card-title">${title}</p><p class="track-card-artist">${artist}</p></div>
-            <span class="track-card-badge">${r.total != null ? r.total : ''}/50</span>
-          </a>`;
-        }).join('');
-        el.querySelectorAll('.track-card').forEach(a => {
-          a.addEventListener('click', (e) => { e.preventDefault(); openRateTrack(a.dataset); });
-        });
+        myReviewsCache = data.reviews || [];
+        renderMyReviews(myReviewsCache);
       } catch (_) {
         document.getElementById('myReviewsList').innerHTML = '<p class="empty-state">Не удалось загрузить</p>';
       }
@@ -1178,10 +1314,10 @@
         const list = data.favorites || [];
         const el = document.getElementById('myFavoritesList');
         if (list.length === 0) {
-          el.innerHTML = '<p class="empty-state"><span class="icon">🤍</span>В избранном пока пусто</p>';
+        el.innerHTML = '<p class="empty-state"><span class="icon">🎵</span>В плейлисте пока пусто</p>';
           return;
         }
-        renderTrackList('myFavoritesList', list.map(f => ({ track_id: f.track_id, title: f.title, artist: f.artist, cover_url: '' })), { showBadge: false });
+        renderTrackList('myFavoritesList', list, { showBadge: false, context: 'favorites' });
       } catch (_) {
         document.getElementById('myFavoritesList').innerHTML = '<p class="empty-state">Не удалось загрузить</p>';
       }
@@ -1214,15 +1350,41 @@
       }
     }
 
+    function detectSource(trackId, trackUrl) {
+      const id = (trackId || '').toString();
+      const url = (trackUrl || '').toString();
+      if (id.startsWith('sc_') || url.indexOf('soundcloud.com') !== -1) return 'soundcloud';
+      return 'yandex';
+    }
+
+    function normalizeTrack(t) {
+      const id = t.track_id ?? t.id;
+      const url = t.track_url || t.trackUrl || '';
+      return {
+        track_id: id != null ? String(id) : '',
+        title: t.title || t.track_title || '',
+        artist: t.artist || t.track_artist || '',
+        cover_url: t.cover_url || '',
+        track_url: url,
+        source: t.source || detectSource(id, url)
+      };
+    }
+
     async function openRateTrack(data) {
+      const tid = (data.track_id || data.trackId || '').toString();
+      const trackUrl = (data.url || '').toString();
+      const context = (data.context || '').toString();
+      const source = detectSource(tid, trackUrl);
       currentRatingTrack = {
-        track_id: data.track_id || data.trackId,
+        track_id: tid,
         title: data.title,
         artist: data.artist,
         cover_url: data.cover || data.coverUrl || '',
         genre: data.genre || '',
-        track_url: data.url || ''
+        track_url: trackUrl,
+        source: source
       };
+      const listenLabel = source === 'soundcloud' ? 'Слушать в SoundCloud' : 'Слушать в Яндекс.Музыке';
       document.getElementById('ratingTrackInfo').innerHTML = `
         <div class="card">
           <div class="daily-hero">
@@ -1230,22 +1392,30 @@
             <p class="daily-hero-title">${escapeHtml(currentRatingTrack.title)}</p>
             <p class="daily-hero-artist">${escapeHtml(currentRatingTrack.artist)}</p>
             <div class="track-actions-row">
-              ${currentRatingTrack.track_url ? `<a href="${escapeHtml(currentRatingTrack.track_url)}" target="_blank" class="btn btn-outline">Слушать в Яндексе</a>` : ''}
+              ${currentRatingTrack.track_url ? `<a href="${escapeHtml(currentRatingTrack.track_url)}" target="_blank" class="btn btn-outline">${escapeHtml(listenLabel)}</a>` : ''}
+              <button type="button" class="btn btn-outline" id="ratingPlayBtn">▶ В плеере</button>
               <button type="button" class="btn btn-outline" id="ratingShareBtn">📤 Поделиться</button>
             </div>
           </div>
         </div>`;
       const shareBtn = document.getElementById('ratingShareBtn');
       if (shareBtn) shareBtn.addEventListener('click', () => shareTrack(currentRatingTrack));
-      if (!criteriaConfig.criteria || criteriaConfig.criteria.length === 0) await loadCriteria();
-      renderCriteria('ratingCriteriaList', 'rating');
-      const criteriaKeys = ['rhymes', 'rhythm', 'style', 'charisma', 'vibe'];
-      for (const key of criteriaKeys) {
-        const val = data[key];
-        if (val !== undefined && val !== '' && val != null) {
-          const input = document.querySelector(`#ratingCriteriaList input[data-key="${key}"]`);
-          const valSpan = document.querySelector(`#ratingCriteriaList [data-val="${key}"]`);
-          if (input) { input.value = val; if (valSpan) valSpan.textContent = val; }
+      const playBtn = document.getElementById('ratingPlayBtn');
+      if (playBtn) playBtn.addEventListener('click', () => setQueueAndPlay(currentRatingTrack));
+      const ratingCard = document.querySelector('#ratingCriteriaList')?.closest('.card');
+      if (context === 'favorites') {
+        if (ratingCard) ratingCard.style.display = 'none';
+      } else {
+        if (!criteriaConfig.criteria || criteriaConfig.criteria.length === 0) await loadCriteria();
+        renderCriteria('ratingCriteriaList', 'rating');
+        const criteriaKeys = ['rhymes', 'rhythm', 'style', 'charisma', 'vibe'];
+        for (const key of criteriaKeys) {
+          const val = data[key];
+          if (val !== undefined && val !== '' && val != null) {
+            const input = document.querySelector(`#ratingCriteriaList input[data-key="${key}"]`);
+            const valSpan = document.querySelector(`#ratingCriteriaList [data-val="${key}"]`);
+            if (input) { input.value = val; if (valSpan) valSpan.textContent = val; }
+          }
         }
       }
       const reviewTextEl = document.getElementById('ratingReviewText');
@@ -1261,7 +1431,7 @@
         try {
           const check = await api('/user/favorites/check/' + encodeURIComponent(currentRatingTrack.track_id));
           const inFav = check.in_favorites === true;
-          favWrap.innerHTML = `<button type="button" class="btn btn-outline btn-fav" id="ratingFavBtn">${inFav ? '❤️ В избранном' : '🤍 В избранное'}</button>`;
+          favWrap.innerHTML = `<button type="button" class="btn btn-outline btn-fav" id="ratingFavBtn">${inFav ? '❤️ В плейлисте' : '🤍 В плейлист'}</button>`;
           document.getElementById('ratingFavBtn').addEventListener('click', () => toggleFavoriteInOverlay(inFav));
         } catch (_) { favWrap.innerHTML = ''; }
       }
@@ -1269,6 +1439,13 @@
       overlay.classList.remove('hidden');
       overlay.scrollTop = 0;
       document.body.classList.add('overlay-open');
+      // После открытия оверлея WebView может приостановить аудио — возобновляем текущий трек (карточка не переключает плеер)
+      setTimeout(() => {
+        if (player && player.paused && !userPausedPlayback && player.src && !player.ended) {
+          player.play().catch(() => {});
+          if (playerPlayPauseBtn) playerPlayPauseBtn.textContent = '⏸';
+        }
+      }, 150);
     }
 
     async function toggleFavoriteInOverlay(currentInFav) {
@@ -1279,7 +1456,7 @@
       try {
         if (currentInFav) {
           await apiDelete('/user/favorites/' + encodeURIComponent(currentRatingTrack.track_id));
-          btn.textContent = '🤍 В избранное';
+          btn.textContent = '🤍 В плейлист';
           currentRatingTrack._inFav = false;
         } else {
           await apiPost('/user/favorites', {
@@ -1287,7 +1464,7 @@
             track_title: currentRatingTrack.title,
             track_artist: currentRatingTrack.artist
           });
-          btn.textContent = '❤️ В избранном';
+          btn.textContent = '❤️ В плейлисте';
           currentRatingTrack._inFav = true;
         }
         const newState = currentRatingTrack._inFav;
@@ -1389,6 +1566,151 @@
 
     document.getElementById('submitDailyRating').addEventListener('click', () => submitRating(true));
     document.getElementById('submitRatingBtn').addEventListener('click', () => submitRating(false));
+
+    const player = document.getElementById('appPlayer');
+    const playerBar = document.getElementById('playerBar');
+    const playerTitleEl = document.getElementById('playerTitle');
+    const playerArtistEl = document.getElementById('playerArtist');
+    const playerCoverEl = document.getElementById('playerCover');
+    const playerPlayPauseBtn = document.getElementById('playerPlayPause');
+    const playerPrevBtn = document.getElementById('playerPrev');
+    const playerNextBtn = document.getElementById('playerNext');
+    const playerVolumeEl = document.getElementById('playerVolume');
+    let currentPlayerTrack = null;
+    let playerQueue = [];
+    let playerCurrentIndex = -1;
+    let userPausedPlayback = false;
+
+    function showPlayerBar(track) {
+      if (!playerBar) return;
+      currentPlayerTrack = track;
+      playerBar.classList.remove('hidden');
+      playerTitleEl.textContent = track.title || 'Без названия';
+      playerArtistEl.textContent = track.artist || 'Неизвестен';
+      if (track.cover_url) {
+        playerCoverEl.src = track.cover_url;
+        playerCoverEl.style.display = '';
+      } else {
+        playerCoverEl.style.display = 'none';
+      }
+      playerPlayPauseBtn.textContent = '⏸';
+      if (playerPrevBtn) playerPrevBtn.disabled = !playerQueue.length || playerCurrentIndex <= 0;
+      if (playerNextBtn) playerNextBtn.disabled = !playerQueue.length || playerCurrentIndex >= playerQueue.length - 1;
+    }
+
+    function playInApp(track, index) {
+      if (!player || !track) return;
+      const tid = track.track_id ?? track.id;
+      if (tid === undefined || tid === null || tid === '') return;
+      userPausedPlayback = false;
+      if (index !== undefined && index >= 0) {
+        playerCurrentIndex = index;
+      }
+      const src = API + '/audio/' + encodeURIComponent(String(tid));
+      if (player.src !== src) {
+        player.src = src;
+      }
+      player.play().then(() => {
+        showPlayerBar(track);
+      }).catch(() => {
+        // Не показываем алерт здесь: воспроизведение может начаться с задержкой при загрузке потока
+      });
+    }
+
+    function setQueueAndPlay(track) {
+      const ctx = window.__playerListContext;
+      let list = (ctx && ctx.tracks && ctx.tracks.length) ? ctx.tracks : [normalizeTrack(track)];
+      const trackIdStr = String(track.track_id ?? track.id ?? '');
+      let idx = list.findIndex(tr => String(tr.track_id ?? tr.id ?? '') === trackIdStr);
+      // Если трека нет в текущем контексте (например, кликнули «В плеере» не из списка),
+      // создаём очередь только из этого трека, чтобы не включался первый трек из чужого списка.
+      if (idx < 0) {
+        list = [normalizeTrack(track)];
+        idx = 0;
+      }
+      playerQueue = list;
+      playerCurrentIndex = idx;
+      playInApp(playerQueue[playerCurrentIndex], playerCurrentIndex);
+    }
+
+    if (playerPlayPauseBtn && player) {
+      playerPlayPauseBtn.addEventListener('click', () => {
+        if (player.paused) {
+          userPausedPlayback = false;
+          player.play().catch(() => {});
+          playerPlayPauseBtn.textContent = '⏸';
+        } else {
+          userPausedPlayback = true;
+          player.pause();
+          playerPlayPauseBtn.textContent = '▶';
+        }
+      });
+      player.addEventListener('ended', () => {
+        playerPlayPauseBtn.textContent = '▶';
+        if (playerQueue.length && playerCurrentIndex >= 0 && playerCurrentIndex < playerQueue.length - 1) {
+          playerCurrentIndex++;
+          const nextTrack = playerQueue[playerCurrentIndex];
+          playInApp(nextTrack, playerCurrentIndex);
+        }
+      });
+    }
+    if (playerPrevBtn) {
+      playerPrevBtn.addEventListener('click', () => {
+        if (playerQueue.length && playerCurrentIndex > 0) {
+          playerCurrentIndex--;
+          playInApp(playerQueue[playerCurrentIndex], playerCurrentIndex);
+        }
+      });
+    }
+    if (playerNextBtn) {
+      playerNextBtn.addEventListener('click', () => {
+        if (playerQueue.length && playerCurrentIndex < playerQueue.length - 1) {
+          playerCurrentIndex++;
+          playInApp(playerQueue[playerCurrentIndex], playerCurrentIndex);
+        }
+      });
+    }
+    if (playerVolumeEl && player) {
+      player.volume = 1;
+      playerVolumeEl.addEventListener('input', () => {
+        player.volume = parseFloat(playerVolumeEl.value, 10);
+      });
+    }
+    if (player) {
+      let errorAlertTimeout = null;
+      player.addEventListener('error', () => {
+        clearTimeout(errorAlertTimeout);
+        errorAlertTimeout = setTimeout(() => {
+          if (player.error && currentPlayerTrack) {
+            if (window.Telegram?.WebApp?.showAlert) window.Telegram.WebApp.showAlert('Трек недоступен для воспроизведения.');
+          }
+        }, 2000);
+      });
+      player.addEventListener('playing', () => { clearTimeout(errorAlertTimeout); errorAlertTimeout = null; });
+    }
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible' && player && currentPlayerTrack && player.paused && !userPausedPlayback && player.src && !player.ended) {
+        player.play().catch(() => {});
+        if (playerPlayPauseBtn) playerPlayPauseBtn.textContent = '⏸';
+      }
+    });
+
+    const myReviewsSearchInput = document.getElementById('myReviewsSearchInput');
+    if (myReviewsSearchInput) {
+      myReviewsSearchInput.addEventListener('input', (e) => {
+        const q = e.target.value.trim().toLowerCase();
+        if (!q) {
+          renderMyReviews(myReviewsCache);
+          return;
+        }
+        const filtered = myReviewsCache.filter(r => {
+          const title = (r.title || '').toString().toLowerCase();
+          const artist = (r.artist || '').toString().toLowerCase();
+          return title.includes(q) || artist.includes(q);
+        });
+        renderMyReviews(filtered);
+      });
+    }
 
     let profilePinPickTrack = null;
     document.getElementById('profileEditBtn').addEventListener('click', async () => {
@@ -1628,6 +1950,11 @@
         if (panel === 'Playlist') document.getElementById('playlistTracksList').innerHTML = '';
         if (panel === 'My') { loadMyReviews(); loadFavorites(); }
         if (panel === 'Profile') loadLeaderboard();
+        // Плеер в фоне: если воспроизведение остановилось при смене вкладки не по нашей вине — возобновить
+        if (player && currentPlayerTrack && player.paused && !userPausedPlayback && player.src && !player.ended) {
+          player.play().catch(() => {});
+          if (playerPlayPauseBtn) playerPlayPauseBtn.textContent = '⏸';
+        }
       });
     });
 
@@ -1682,14 +2009,19 @@
         try {
           const track = await api('/tracks/' + encodeURIComponent(trackId));
           if (track && (track.id || track.track_id)) {
+            const id = track.id || track.track_id;
+            const url = track.track_url || track.trackUrl || '';
+            window.__playerListContext = { containerId: 'deepLink', tracks: [normalizeTrack(track)] };
             openRateTrack({
-              track_id: track.id || track.track_id,
+              track_id: id,
+              trackId: id,
               title: track.title,
               artist: track.artist,
-              cover_url: track.cover_url,
+              cover: track.cover_url,
               coverUrl: track.cover_url,
               genre: track.genre,
-              url: track.track_url
+              url: url,
+              source: detectSource(id, url)
             });
           }
         } catch (_) {}

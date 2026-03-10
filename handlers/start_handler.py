@@ -52,7 +52,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         from urllib.parse import quote
 
         track_encoded = pending_track_param[6:].strip()
-        track_id = track_encoded.replace("_", ":", 1) if "_" in track_encoded else track_encoded
+        # SoundCloud id вида sc_12345 не трогаем; Яндекс — восстанавливаем ":" из первого "_"
+        if track_encoded.startswith("sc_"):
+            track_id = track_encoded
+        else:
+            track_id = track_encoded.replace("_", ":", 1) if "_" in track_encoded else track_encoded
         url = f"{config.MINI_APP_URL.rstrip('/')}?track={quote(track_id, safe='')}"
         await update.message.reply_text(
             "🎵 Тебе прислали трек!\n\nОткрой игру и оцени его:",

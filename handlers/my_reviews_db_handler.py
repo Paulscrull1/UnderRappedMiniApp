@@ -32,7 +32,7 @@ async def view_reviews(update: Update, context: ContextTypes.DEFAULT_TYPE):
         from keyboards import main_menu
         await query.edit_message_text(
             f"📊 {level_progress_bar(progress['level'], progress['exp'])}\n"
-            f"🤍 Избранное: {fav_count}\n\n"
+            f"🎵 Мой плейлист: {fav_count}\n\n"
             "У тебя пока нет оценок. Самое время начать! 🎧",
             reply_markup=main_menu()
         )
@@ -46,7 +46,7 @@ async def view_reviews(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = (
         f"📊 *Моя статистика*\n"
         f"{level_progress_bar(progress['level'], progress['exp'])}\n"
-        f"🤍 Избранное: {fav_count}\n\n"
+        f"🎵 Мой плейлист: {fav_count}\n\n"
         f"📌 Твои оценки — стр. {page + 1}/{total_pages}\n\n"
     )
     reply_markup = reviews_list_buttons_paginated(
@@ -93,20 +93,20 @@ async def show_detail_review(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 
 async def view_favorites(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Список избранных треков; по нажатию — карточка трека."""
+    """Мой плейлист (избранные треки); по нажатию — карточка трека."""
     query = update.callback_query
     await query.answer()
     user_id = query.from_user.id
     favs = get_favorites(user_id, limit=30)
     if not favs:
         await query.edit_message_text(
-            "🤍 В избранном пока пусто. Добавляй треки кнопкой «В избранное» на карточке.",
+            "🎵 В плейлисте пока пусто. Добавляй треки кнопкой «В плейлист» на карточке.",
             reply_markup=back_to_menu_button(),
         )
         return
     tracks_for_buttons = [{"id": t["track_id"], "title": t["title"], "artist": t["artist"]} for t in favs]
     from keyboards import chart_list_buttons, back_to_menu_button
-    text = f"🤍 *Моё избранное* ({len(favs)})\n\nВыбери трек:"
+    text = f"🎵 *Мой плейлист* ({len(favs)})\n\nВыбери трек:"
     reply_markup = chart_list_buttons(tracks_for_buttons)
     # Клавиатура возвращает tuple; делаем список строк и заменяем последнюю на «Назад в меню»
     from telegram import InlineKeyboardButton, InlineKeyboardMarkup
@@ -120,7 +120,8 @@ async def view_downloads(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Сначала копирует сохранённые сообщения с треками; если сообщение удалено — переотправляет через API."""
     import io
     from telegram import InputFile
-    from yandex_music_service import download_track_bytes
+    from yandex_music_service import download_track_bytes as yandex_download_track_bytes
+    from soundcloud_service import download_track_bytes as soundcloud_download_track_bytes
 
     query = update.callback_query
     await query.answer()
@@ -154,7 +155,11 @@ async def view_downloads(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 pass
         if not copied:
             try:
-                audio_bytes, title, performer = download_track_bytes(d["track_id"])
+                tid = d.get("track_id") or ""
+                if str(tid).startswith("sc_"):
+                    audio_bytes, title, performer = soundcloud_download_track_bytes(tid)
+                else:
+                    audio_bytes, title, performer = yandex_download_track_bytes(tid)
                 if not audio_bytes or len(audio_bytes) == 0:
                     continue
                 if len(audio_bytes) > 50 * 1024 * 1024:

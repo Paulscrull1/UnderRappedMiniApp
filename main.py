@@ -118,7 +118,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("✅ Рецензия добавлена!", reply_markup=after_review_buttons(track_id=track_id))
         return
 
-    await handle_search(update, context)
+    if state.get("stage") == "awaiting_search_query":
+        if await handle_search(update, context):
+            return
 
 
 def main():
@@ -148,11 +150,11 @@ def main():
     app.add_handler(MessageHandler(filters.PHOTO, handle_profile_photo))
 
     # Поиск и оценка
-    app.add_handler(CallbackQueryHandler(start_search, pattern="^start_search$"))
+    app.add_handler(CallbackQueryHandler(start_search, pattern="^start_search_(yandex|soundcloud)$"))
     app.add_handler(CallbackQueryHandler(handle_rate_track, pattern="^rate_track_"))
     app.add_handler(CallbackQueryHandler(handle_rating_callback, pattern="^rate_"))
     app.add_handler(CallbackQueryHandler(handle_rating_callback, pattern="^cancel_rating$"))
-    # Карточка трека: чарт, избранное
+    # Карточка трека: чарт, плейлист
     app.add_handler(CallbackQueryHandler(handle_chart_track, pattern="^chart_track_"))
     app.add_handler(CallbackQueryHandler(handle_search_track, pattern="^search_track_"))
     app.add_handler(CallbackQueryHandler(handle_playlist_track, pattern="^playlist_track_"))
@@ -182,7 +184,7 @@ def main():
     app.add_handler(CallbackQueryHandler(show_leaderboard, pattern="^show_leaderboard$"))
     app.add_handler(CallbackQueryHandler(show_leader_profile, pattern="^leader_\\d+$"))
 
-    # Моя статистика и избранное
+    # Моя статистика и плейлист
     app.add_handler(CallbackQueryHandler(view_reviews, pattern="^view_reviews$"))
     app.add_handler(CallbackQueryHandler(view_reviews, pattern="^view_reviews_page_\\d+$"))
     app.add_handler(CallbackQueryHandler(view_favorites, pattern="^view_favorites$"))

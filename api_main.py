@@ -8,7 +8,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, File, Header, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi import APIRouter
 from pydantic import BaseModel
 from typing import Optional
@@ -41,7 +41,14 @@ from database import (
     set_pinned_track,
     clear_pinned_track,
 )
-from yandex_music_service import get_daily_track, get_chart_tracks, search_tracks, get_track_by_id, get_playlist_tracks
+from yandex_music_service import (
+    get_daily_track,
+    get_chart_tracks,
+    get_playlist_tracks,
+    download_track_bytes as yandex_download_track_bytes,
+)
+from soundcloud_service import download_track_bytes as soundcloud_download_track_bytes
+from music_providers import search_tracks, get_track_by_id
 from utils import CRITERIA, MAX_SCORE
 
 @asynccontextmanager
@@ -121,11 +128,14 @@ def tracks_chart(limit: int = 20):
 
 
 @api.get("/tracks/search")
-def tracks_search(q: str = "", limit: int = 10):
-    """Поиск треков."""
+def tracks_search(q: str = "", limit: int = 10, source: Optional[str] = None):
+    """Поиск треков. source: yandex | soundcloud — искать только в указанном источнике."""
     if not q or len(q.strip()) == 0:
         return {"tracks": []}
-    tracks = search_tracks(q.strip(), limit=min(limit, 20))
+    sources = ("yandex", "soundcloud")
+    if source and source.strip().lower() in ("yandex", "soundcloud"):
+        sources = (source.strip().lower(),)
+    tracks = search_tracks(q.strip(), limit=min(limit, 20), sources=sources)
     return {"tracks": tracks}
 
 
@@ -145,11 +155,10 @@ def tracks_top(limit: int = 20):
         tracks = get_top_tracks_by_rating(limit=min(limit, 50))
     except Exception:
         return {"tracks": []}
-    from yandex_music_service import get_track_by_id
     out = []
     for t in tracks:
         tid = t.get("track_id")
-        cover_url, track_url, genre = "", "", "—"
+        cover_url, track_url, genre, source = "", "", "—", ""
         if tid:
             try:
                 full = get_track_by_id(tid)
@@ -157,6 +166,7 @@ def tracks_top(limit: int = 20):
                     cover_url = full.get("cover_url") or ""
                     track_url = full.get("track_url") or ""
                     genre = full.get("genre") or "—"
+                    source = full.get("source") or ""
             except Exception:
                 pass
         out.append({
@@ -168,6 +178,7 @@ def tracks_top(limit: int = 20):
             "cover_url": cover_url,
             "track_url": track_url,
             "genre": genre,
+            "source": source,
         })
     return {"tracks": out}
 
@@ -179,6 +190,32 @@ def track_by_id(track_id: str):
     if not track:
         raise HTTPException(status_code=404, detail="Track not found")
     return track
+
+
+@api.get("/audio/{track_id}")
+def audio_stream(track_id: str):
+    """
+    Аудио для Mini App: объединённая точка для Яндекс.Музыки и SoundCloud.
+    Возвращает аудио-поток (audio/mpeg) по track_id (включая sc_...).
+    """
+    is_soundcloud = str(track_id).startswith("sc_")
+    if is_soundcloud:
+        audio_bytes, title, performer = soundcloud_download_track_bytes(track_id)
+    else:
+        audio_bytes, title, performer = yandex_download_track_bytes(track_id)
+    if not audio_bytes:
+        raise HTTPException(status_code=404, detail="Audio not available")
+
+    def iterfile():
+        yield audio_bytes
+
+    # Имя файла только ASCII: заголовки HTTP кодируются в latin-1, кириллица ломает ответ
+    safe_name = "audio.mp3"
+    return StreamingResponse(
+        iterfile(),
+        media_type="audio/mpeg",
+        headers={"Content-Disposition": f'inline; filename="{safe_name}"'},
+    )
 
 
 @api.get("/user/me")
@@ -240,13 +277,38 @@ def user_reviews(
 def user_favorites(
     x_telegram_init_data: Optional[str] = Header(None, alias="X-Telegram-Init-Data"),
 ):
-    """Моё избранное."""
+    """Мой плейлист (избранные треки)."""
     user = _get_user_from_init_data(x_telegram_init_data)
     user_id = user.get("id")
     if not user_id:
         raise HTTPException(status_code=401, detail="User id not in init data")
     favs = get_favorites(int(user_id), limit=100)
-    return {"favorites": favs}
+    enriched = []
+    for f in favs:
+        tid = f.get("track_id")
+        cover_url, track_url, genre, source = "", "", "—", ""
+        if tid:
+            try:
+                full = get_track_by_id(tid)
+                if full:
+                    cover_url = full.get("cover_url") or ""
+                    track_url = full.get("track_url") or ""
+                    genre = full.get("genre") or "—"
+                    source = full.get("source") or ""
+            except Exception:
+                pass
+        enriched.append(
+            {
+                "track_id": tid,
+                "title": f.get("title") or "Без названия",
+                "artist": f.get("artist") or "Неизвестен",
+                "cover_url": cover_url,
+                "track_url": track_url,
+                "genre": genre,
+                "source": source,
+            }
+        )
+    return {"favorites": enriched}
 
 
 class FavoritePayload(BaseModel):
@@ -260,7 +322,7 @@ def add_user_favorite(
     payload: FavoritePayload,
     x_telegram_init_data: Optional[str] = Header(None, alias="X-Telegram-Init-Data"),
 ):
-    """Добавить трек в избранное."""
+    """Добавить трек в плейлист."""
     user = _get_user_from_init_data(x_telegram_init_data)
     user_id = user.get("id")
     if not user_id:

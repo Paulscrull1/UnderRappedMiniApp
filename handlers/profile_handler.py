@@ -170,7 +170,7 @@ async def profile_set_description(update: Update, context: ContextTypes.DEFAULT_
 
 
 async def profile_pin_track(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Показать список треков для закрепления (оценки + избранное)."""
+    """Показать список треков для закрепления (оценки + плейлист)."""
     query = update.callback_query
     await query.answer()
     user_id = query.from_user.id
@@ -198,7 +198,7 @@ async def profile_pin_track(update: Update, context: ContextTypes.DEFAULT_TYPE):
             })
     if not tracks:
         await query.edit_message_text(
-            "Нет треков для закрепления. Сначала оцени или добавь в избранное.",
+            "Нет треков для закрепления. Сначала оцени трек или добавь его в плейлист.",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("🔙 Назад", callback_data="profile_edit")],
             ]),

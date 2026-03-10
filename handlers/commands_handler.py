@@ -3,7 +3,7 @@
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from yandex_music_service import get_chart_tracks, get_daily_track
-from yandex import search_track
+from music_providers import search_tracks
 from database import get_last_reviews, get_user_progress, get_favorites
 from keyboards import chart_list_buttons_paginated, back_to_menu_button, main_menu
 from utils import hash_id, hash_to_track_id, level_progress_bar
@@ -61,7 +61,7 @@ async def cmd_daily(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Команда /stats — моя статистика (оценки, уровень, избранное)."""
+    """Команда /stats — моя статистика (оценки, уровень, плейлист)."""
     user_id = update.message.from_user.id
     progress = get_user_progress(user_id)
     fav_count = len(get_favorites(user_id))
@@ -70,7 +70,7 @@ async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not reviews:
         await update.message.reply_text(
             f"📊 {level_progress_bar(progress['level'], progress['exp'])}\n"
-            f"🤍 Избранное: {fav_count}\n\n"
+            f"🎵 Мой плейлист: {fav_count}\n\n"
             "У тебя пока нет оценок. Самое время начать! 🎧",
             reply_markup=main_menu(),
         )
@@ -79,10 +79,10 @@ async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = (
         f"📊 *Моя статистика*\n"
         f"{level_progress_bar(progress['level'], progress['exp'])}\n"
-        f"🤍 Избранное: {fav_count}\n\n"
+        f"🎵 Мой плейлист: {fav_count}\n\n"
         "📌 Твои последние 10 оценок:\n\n"
     )
-    buttons = [[InlineKeyboardButton(f"🤍 Моё избранное ({fav_count})", callback_data="view_favorites")]]
+    buttons = [[InlineKeyboardButton(f"🎵 Мой плейлист ({fav_count})", callback_data="view_favorites")]]
     for r in reviews:
         safe_hash = hash_id(r["track_id"])
         hash_to_track_id[safe_hash] = r["track_id"]
@@ -107,7 +107,7 @@ async def cmd_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     query = " ".join(query_text).strip()
     await update.message.reply_text("🔍 Ищу трек...")
-    tracks = search_track(query, limit=1)
+    tracks = search_tracks(query, limit=3)
     if not tracks:
         await update.message.reply_text(
             "❌ Не нашёл такой трек. Попробуй: /search Исполнитель — Название"

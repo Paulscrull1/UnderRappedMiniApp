@@ -1,12 +1,14 @@
 # handlers/track_card_handler.py
-"""Единая карточка трека и обработчики кнопок: Оценить, Рецензия, Скачать, Избранное."""
+"""Единая карточка трека и обработчики кнопок: Оценить, Рецензия, Скачать, Плейлист."""
 import asyncio
 import io
 import logging
 from telegram import Update, InputFile
 from telegram.ext import ContextTypes
 from telegram.error import TimedOut, BadRequest
-from yandex_music_service import get_track_by_id, download_track_bytes
+from yandex_music_service import download_track_bytes as yandex_download_track_bytes
+from soundcloud_service import download_track_bytes as soundcloud_download_track_bytes
+from music_providers import get_track_by_id
 import config
 from database import is_in_favorites, add_favorite, remove_favorite, add_exp, add_download, get_track_rating_stats
 from keyboards import track_card_buttons, rating_buttons
@@ -47,9 +49,11 @@ async def send_track_card(message_or_query, track_id, user_id, track_dict=None, 
             await message_or_query.reply_text("❌ Не удалось загрузить трек.")
         return None
     caption = build_card_caption(track)
-    url = track.get("track_url") or f"https://music.yandex.ru/search?text={track.get('artist', '')}+{track.get('title', '')}"
+    url = track.get("track_url") or ""
+    if not url and track.get("source") != "soundcloud":
+        url = f"https://music.yandex.ru/search?text={track.get('artist', '')}+{track.get('title', '')}"
     in_fav = is_in_favorites(user_id, track["id"])
-    markup = track_card_buttons(track["id"], url, in_fav)
+    markup = track_card_buttons(track["id"], url, in_fav, track.get("source") or "")
     photo = track.get("cover_url") or None
     msg = getattr(message_or_query, "message", message_or_query)
     if photo:
@@ -79,7 +83,7 @@ async def handle_chart_track(update: Update, context: ContextTypes.DEFAULT_TYPE)
     caption = build_card_caption(track)
     url = track.get("track_url") or ""
     in_fav = is_in_favorites(user_id, track["id"])
-    markup = track_card_buttons(track["id"], url, in_fav)
+    markup = track_card_buttons(track["id"], url, in_fav, track.get("source") or "")
     photo = track.get("cover_url")
     try:
         if photo:
@@ -111,7 +115,7 @@ async def handle_playlist_track(update: Update, context: ContextTypes.DEFAULT_TY
     caption = build_card_caption(track)
     url = track.get("track_url") or ""
     in_fav = is_in_favorites(user_id, track["id"])
-    markup = track_card_buttons(track["id"], url, in_fav)
+    markup = track_card_buttons(track["id"], url, in_fav, track.get("source") or "")
     photo = track.get("cover_url")
     try:
         if photo:
@@ -143,7 +147,7 @@ async def handle_search_track(update: Update, context: ContextTypes.DEFAULT_TYPE
     caption = build_card_caption(track)
     url = track.get("track_url") or ""
     in_fav = is_in_favorites(user_id, track["id"])
-    markup = track_card_buttons(track["id"], url, in_fav)
+    markup = track_card_buttons(track["id"], url, in_fav, track.get("source") or "")
     photo = track.get("cover_url")
     try:
         if photo:
@@ -228,6 +232,7 @@ async def handle_download_track(update: Update, context: ContextTypes.DEFAULT_TY
         return
     track_id = hash_to_track_id[track_hash]
     user_id = query.from_user.id
+    is_soundcloud = str(track_id).startswith("sc_")
     key = _download_key(user_id, track_id)
     if key in _downloading:
         await query.answer("⏳ Загрузка уже идёт, подожди.", show_alert=True)
@@ -236,16 +241,22 @@ async def handle_download_track(update: Update, context: ContextTypes.DEFAULT_TY
     await query.answer("⏳ Начинаю загрузку...")
     status_msg = None
     try:
-        # Этап 1: сообщение и загрузка из Яндекса
-        status_msg = await query.message.reply_text(
-            "⏳ _Загружаю трек из Яндекс.Музыки..._", parse_mode="Markdown"
-        )
-        audio_bytes, title, performer = download_track_bytes(track_id)
+        if is_soundcloud:
+            status_msg = await query.message.reply_text(
+                "⏳ _Загружаю трек из SoundCloud..._", parse_mode="Markdown"
+            )
+            audio_bytes, title, performer = soundcloud_download_track_bytes(track_id)
+        else:
+            status_msg = await query.message.reply_text(
+                "⏳ _Загружаю трек из Яндекс.Музыки..._", parse_mode="Markdown"
+            )
+            audio_bytes, title, performer = yandex_download_track_bytes(track_id)
 
         if not audio_bytes or len(audio_bytes) == 0:
             if status_msg:
+                src = "SoundCloud" if is_soundcloud else "Яндекс.Музыки"
                 await status_msg.edit_text(
-                    "❌ Не удалось скачать трек. Проверьте токен Яндекс.Музыки и доступность трека."
+                    f"❌ Не удалось скачать трек из {src}. Проверьте доступность трека."
                 )
             return
         if len(audio_bytes) > 50 * 1024 * 1024:
@@ -310,7 +321,7 @@ async def handle_download_track(update: Update, context: ContextTypes.DEFAULT_TY
         except TimedOut:
             if status_msg:
                 await status_msg.edit_text(
-                    "❌ Таймаут при _отправке файла в Telegram_. Трек с Яндекса загружен, но Telegram не принял за время. Попробуй ещё раз или при медленном интернете подожди."
+                    "❌ Таймаут при _отправке файла в Telegram_. Трек загружен, но Telegram не принял за время. Попробуй ещё раз или подожди при медленном интернете."
                 )
             return
         except BadRequest as e:
@@ -356,7 +367,7 @@ async def handle_fav_toggle(update: Update, context: ContextTypes.DEFAULT_TYPE):
         add_favorite(user_id, track_id, track["title"], track["artist"])
         add_exp(user_id, EXP_FOR_FAVORITE)
         in_fav = True
-    markup = track_card_buttons(track_id, url, in_fav)
+    markup = track_card_buttons(track_id, url, in_fav, track.get("source") or "")
     caption = build_card_caption(track)
     try:
         await query.edit_message_reply_markup(reply_markup=markup)
