@@ -26,10 +26,17 @@ async def ask_for_review(update: Update, context: ContextTypes.DEFAULT_TYPE):
     track_id = hash_to_track_id[track_hash]
     user_id = query.from_user.id
 
+    prev = user_states.get(user_id, {})
+    prev_explore = prev.get("explore")
+    prev_nickname = prev.get("nickname")
     user_states[user_id] = {
         'stage': 'writing_review',
         'track_id': track_id
     }
+    if prev_explore:
+        user_states[user_id]["explore"] = prev_explore
+    if prev_nickname:
+        user_states[user_id]["nickname"] = prev_nickname
 
     await query.edit_message_text(
         "✍️ Напиши свою рецензию (до 500 символов):",
@@ -43,7 +50,15 @@ async def cancel_review(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     user_id = query.from_user.id
     if user_states.get(user_id, {}).get("stage") == "writing_review":
+        explore = user_states[user_id].get("explore")
+        nickname = user_states[user_id].get("nickname")
         del user_states[user_id]
+        if explore or nickname:
+            user_states[user_id] = {"stage": "menu"}
+            if explore:
+                user_states[user_id]["explore"] = explore
+            if nickname:
+                user_states[user_id]["nickname"] = nickname
     await query.edit_message_text(
         "❌ Рецензия отменена.",
         reply_markup=back_to_menu_button(),

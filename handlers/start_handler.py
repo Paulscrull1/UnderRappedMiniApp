@@ -4,7 +4,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppI
 from telegram.ext import ContextTypes
 from keyboards import main_menu
 from database import get_user_nickname, save_user_nickname, get_user_progress, set_referrer_if_empty
-from utils import user_states, level_progress_bar, EXP_FOR_REFERRAL
+from utils import user_states, level_progress_bar, EXP_FOR_REFERRAL_LINK
 from database import add_exp
 
 
@@ -23,9 +23,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     text = (update.message.text or "").strip()
     args = text.split(maxsplit=1)
-    start_param = args[1] if len(args) > 1 else ""
+    start_param = (args[1] if len(args) > 1 else "").strip()
     pending_track_param = start_param if start_param.startswith("track_") else ""
     pending_ref_param = start_param if start_param.startswith("ref_") else ""
+    pending_premium = start_param == "premium"
 
     # Новый пользователь: сначала регистрация (ник), но запоминаем, по какой ссылке он пришёл
     if not nickname:
@@ -38,6 +39,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             state["pending_track"] = pending_track_param
         if pending_ref_param:
             state["pending_ref"] = pending_ref_param
+        if pending_premium:
+            state["pending_premium"] = True
         user_states[user_id] = state
         return
 
@@ -46,6 +49,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Реферальная ссылка для уже зарегистрированного пользователя:
     # не меняем referrer и не начисляем бонус, просто игнорируем.
+
+    if pending_premium:
+        from handlers.premium_handler import send_premium_invoice
+
+        await send_premium_invoice(update, context)
+        return
 
     # Если есть deep-link с треком — сразу даём кнопку «Открыть и оценить»
     if pending_track_param and config.MINI_APP_URL:
@@ -115,7 +124,7 @@ async def handle_nickname(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ref_id = None
         if ref_id:
             if set_referrer_if_empty(user_id, ref_id):
-                add_exp(ref_id, EXP_FOR_REFERRAL)
+                add_exp(ref_id, EXP_FOR_REFERRAL_LINK)
 
     # Если пользователь пришёл по ссылке вида /start track_XXX,
     # после регистрации покажем ему кнопку открытия трека в Mini App.
@@ -132,6 +141,11 @@ async def handle_nickname(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 [[InlineKeyboardButton("🎮 Открыть и оценить", web_app=WebAppInfo(url=url))]]
             ),
         )
+
+    if prev_state.get("pending_premium"):
+        from handlers.premium_handler import send_premium_invoice
+
+        await send_premium_invoice(update, context)
 
 
 async def back_to_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):

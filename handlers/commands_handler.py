@@ -1,5 +1,7 @@
 # handlers/commands_handler.py
 # Команды: /info, /chart, /daily, /stats, /search <запрос>
+from urllib.parse import quote
+
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from yandex_music_service import get_chart_tracks, get_daily_track
@@ -30,6 +32,7 @@ async def cmd_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def cmd_chart(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Команда /chart — открыть чарт (первая страница с пагинацией)."""
+    from database import get_user_reviewed_track_ids
     from handlers.chart_handler import CHART_FETCH_LIMIT, PAGE_SIZE
     tracks = get_chart_tracks(chart_id="world", limit=CHART_FETCH_LIMIT)
     if not tracks:
@@ -39,11 +42,15 @@ async def cmd_chart(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
     total_pages = (len(tracks) + PAGE_SIZE - 1) // PAGE_SIZE
-    text = f"📊 *Чарт Яндекс.Музыки* — стр. 1/{total_pages}\n\nВыбери трек:"
+    uid = update.effective_user.id
+    reviewed_set = set(get_user_reviewed_track_ids(uid))
+    text = f"📊 *Чарт Яндекс.Музыки* — стр. 1/{total_pages}\n\nВыбери трек:\n_✓ — вы уже оценивали_"
     await update.message.reply_text(
         text,
         parse_mode="Markdown",
-        reply_markup=chart_list_buttons_paginated(tracks, page=0, per_page=PAGE_SIZE),
+        reply_markup=chart_list_buttons_paginated(
+            tracks, page=0, per_page=PAGE_SIZE, reviewed_ids=reviewed_set
+        ),
     )
 
 
@@ -132,13 +139,22 @@ async def invite_friends(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
     ref_link = f"https://t.me/{bot_username}?start=ref_{user_id}"
+    share_text = (
+        "Присоединяйся к музыкальной игре! Перейди по ссылке и зарегистрируйся — "
+        "бонусы EXP за приглашение и за оценки треков 🎵"
+    )
+    # t.me/share/url — нативное меню «Отправить» в чат, а не открытие бота с /start
+    share_menu_url = (
+        "https://t.me/share/url?"
+        f"url={quote(ref_link, safe='')}&text={quote(share_text, safe='')}"
+    )
     text = (
         "👥 *Пригласи друзей в игру!*\n\n"
-        "Отправь эту ссылку друзьям — когда они зайдут и создадут профиль, "
-        "ты получишь дополнительный опыт в игре.\n\n"
+        "Друг переходит по ссылке и регистрируется — *+100 EXP* тебе.\n"
+        "Когда друг поставит *первую оценку* треку — *ещё +200 EXP* тебе и *+500 EXP* ему.\n\n"
         f"`{ref_link}`"
     )
-    buttons = [[InlineKeyboardButton("📤 Отправить ссылку", url=ref_link)]]
+    buttons = [[InlineKeyboardButton("📤 Отправить ссылку", url=share_menu_url)]]
     await update.effective_message.reply_text(
         text,
         reply_markup=InlineKeyboardMarkup(buttons),

@@ -23,7 +23,21 @@ MAX_SCORE = 50
 EXP_FOR_RATING = 10
 EXP_FOR_REVIEW = 15
 EXP_FOR_FAVORITE = 5
-EXP_FOR_REFERRAL = 25
+# Реферал: бонус пригласившему при привязке ref (бот /start ref_)
+EXP_FOR_REFERRAL_LINK = 100
+# Устаревшее имя — оставлено для совместимости импортов
+EXP_FOR_REFERRAL = EXP_FOR_REFERRAL_LINK
+# Приглашённый: первая оценка трека; пригласивший: когда приглашённый сделал первую оценку
+EXP_REFERRAL_INVITEE_FIRST_REVIEW = 500
+EXP_REFERRAL_INVITER_FIRST_REVIEW = 200
+
+# Стрик: одноразовая награда при первом достижении вехи (текущий стрик дней)
+EXP_STREAK_MILESTONE = {3: 50, 7: 120, 14: 200, 30: 500}
+
+# Ежедневные задания (UTC), EXP один раз за день за каждое задание
+EXP_DAILY_TASK_NEW_RATING = 25
+EXP_DAILY_TASK_DAILY_TRACK = 40
+EXP_DAILY_TASK_FAVORITE = 15
 
 # Глобальное хранилище для сопоставления хэш → track_id
 hash_to_track_id = {}

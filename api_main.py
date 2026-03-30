@@ -1,5 +1,6 @@
 # api_main.py — FastAPI-сервер для Telegram Mini App
 import os
+import random
 import sys
 
 # Корень проекта для импортов
@@ -40,6 +41,14 @@ from database import (
     clear_profile_avatar_custom,
     set_pinned_track,
     clear_pinned_track,
+    get_user_streak_data,
+    get_daily_tasks_status,
+    get_weekly_ratings_leaderboard,
+    mark_daily_favorite_task,
+    set_referrer_if_empty,
+    add_exp,
+    get_premium_status,
+    get_user_reviewed_track_ids,
 )
 from yandex_music_service import (
     get_daily_track,
@@ -49,7 +58,7 @@ from yandex_music_service import (
 )
 from soundcloud_service import download_track_bytes as soundcloud_download_track_bytes
 from music_providers import search_tracks, get_track_by_id
-from utils import CRITERIA, MAX_SCORE
+from utils import CRITERIA, MAX_SCORE, EXP_FOR_REFERRAL_LINK
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -107,8 +116,16 @@ class ProfileUpdatePayload(BaseModel):
 
 @api.get("/config")
 def app_config():
-    """Публичный конфиг для фронта: bot_username для ссылок «Поделиться»."""
-    return {"bot_username": (config.BOT_USERNAME or "").strip() or None}
+    """Публичный конфиг для фронта: bot_username, mini_app_url, параметры Premium."""
+    return {
+        "bot_username": (config.BOT_USERNAME or "").strip() or None,
+        "mini_app_url": (config.MINI_APP_URL or "").strip() or None,
+        "premium": {
+            "star_price": config.PREMIUM_STAR_PRICE,
+            "duration_days": config.PREMIUM_DURATION_DAYS,
+            "enabled": bool(config.TELEGRAM_BOT_TOKEN),
+        },
+    }
 
 
 @api.get("/tracks/daily")
@@ -123,8 +140,55 @@ def tracks_daily():
 @api.get("/tracks/chart")
 def tracks_chart(limit: int = 20):
     """Чарт Яндекс.Музыки."""
-    tracks = get_chart_tracks(limit=min(limit, 50))
+    tracks = get_chart_tracks(limit=min(limit, 100))
     return {"tracks": tracks}
+
+
+@api.get("/user/explore/chart-queue")
+def user_explore_chart_queue(
+    limit: int = 100,
+    x_telegram_init_data: Optional[str] = Header(None, alias="X-Telegram-Init-Data"),
+):
+    """
+    Очередь для режима «оценка из чарта»: до limit треков из топа Яндекса,
+    без уже оценённых пользователем, в случайном порядке.
+    """
+    user = _get_user_from_init_data(x_telegram_init_data)
+    uid = user.get("id")
+    if not uid:
+        raise HTTPException(status_code=401, detail="User id not in init data")
+    user_id = int(uid)
+    cap = min(max(1, limit), 100)
+    raw = get_chart_tracks(chart_id="world", limit=cap)
+    if not raw:
+        return {"tracks": [], "chart_fetched": 0, "queue_len": 0, "skipped_reviewed": 0}
+    reviewed = set(get_user_reviewed_track_ids(user_id))
+    pool = []
+    for t in raw:
+        tid = t.get("id")
+        if tid is None:
+            continue
+        sid = str(tid)
+        if sid in reviewed:
+            continue
+        pool.append(
+            {
+                "track_id": sid,
+                "title": t.get("title") or "",
+                "artist": t.get("artist") or "",
+                "cover_url": t.get("cover_url") or "",
+                "genre": t.get("genre") or "",
+                "track_url": t.get("track_url") or "",
+                "source": "yandex",
+            }
+        )
+    random.shuffle(pool)
+    return {
+        "tracks": pool,
+        "chart_fetched": len(raw),
+        "queue_len": len(pool),
+        "skipped_reviewed": len(raw) - len(pool),
+    }
 
 
 @api.get("/tracks/search")
@@ -239,6 +303,10 @@ def user_me(x_telegram_init_data: Optional[str] = Header(None, alias="X-Telegram
             "icon": a["icon"],
             "unlocked": a["key"] in unlocked_keys,
         })
+    streak = get_user_streak_data(user_id)
+    daily_tasks = get_daily_tasks_status(user_id)
+    weekly_top = get_weekly_ratings_leaderboard(8)
+    premium = get_premium_status(user_id)
     return {
         "user_id": user_id,
         "nickname": nickname or user.get("first_name", "Игрок"),
@@ -247,7 +315,23 @@ def user_me(x_telegram_init_data: Optional[str] = Header(None, alias="X-Telegram
         "exp_to_next": 100 - (progress["exp"] % 100),
         "profile": profile,
         "achievements": achievements,
+        "streak": streak,
+        "daily_tasks": daily_tasks,
+        "weekly_leaderboard": weekly_top,
+        "premium": premium,
     }
+
+
+@api.get("/user/reviewed-track-ids")
+def user_reviewed_track_ids_list(
+    x_telegram_init_data: Optional[str] = Header(None, alias="X-Telegram-Init-Data"),
+):
+    """Все track_id с оценкой пользователя — для меток «Оценено» в Mini App."""
+    user = _get_user_from_init_data(x_telegram_init_data)
+    user_id = user.get("id")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="User id not in init data")
+    return {"ids": get_user_reviewed_track_ids(int(user_id))}
 
 
 @api.get("/leaderboard")
@@ -311,6 +395,33 @@ def user_favorites(
     return {"favorites": enriched}
 
 
+class ReferralClaimPayload(BaseModel):
+    referrer_id: int
+
+
+@api.post("/user/referral/claim")
+def claim_referral(
+    payload: ReferralClaimPayload,
+    x_telegram_init_data: Optional[str] = Header(None, alias="X-Telegram-Init-Data"),
+):
+    """
+    Привязать реферера из Mini App (параметр ?ref= в URL).
+    Дублирует логику /start ref_: бонус пригласившему только при первой успешной привязке.
+    """
+    user = _get_user_from_init_data(x_telegram_init_data)
+    user_id = user.get("id")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="User id not in init data")
+    user_id = int(user_id)
+    ref = int(payload.referrer_id)
+    if ref <= 0 or ref == user_id:
+        raise HTTPException(status_code=400, detail="invalid referrer_id")
+    if set_referrer_if_empty(user_id, ref):
+        add_exp(ref, EXP_FOR_REFERRAL_LINK)
+        return {"ok": True, "claimed": True}
+    return {"ok": True, "claimed": False}
+
+
 class FavoritePayload(BaseModel):
     track_id: str
     track_title: str
@@ -333,7 +444,8 @@ def add_user_favorite(
         payload.track_title or "Без названия",
         payload.track_artist or "Неизвестен",
     )
-    return {"ok": True}
+    daily_fav_exp = mark_daily_favorite_task(int(user_id))
+    return {"ok": True, "daily_task_favorite_exp": daily_fav_exp}
 
 
 @api.delete("/user/favorites/{track_id:path}")
@@ -583,6 +695,12 @@ def get_avatar(filename: str):
     return FileResponse(path)
 
 
+@api.get("/tournaments/week")
+def tournament_week():
+    """Упрощённый еженедельный турнир: топ по числу новых оценок с понедельника (UTC)."""
+    return {"leaderboard": get_weekly_ratings_leaderboard(15)}
+
+
 @api.get("/achievements")
 def list_achievements():
     """Список всех достижений (к чему стремиться). Без авторизации."""
@@ -633,7 +751,7 @@ def post_review(
 
     was_first_time = not user_has_reviewed(user_id, payload.track_id)
     unlocked_before = set(get_user_achievements(user_id))
-    save_review(
+    gam = save_review(
         user_id=user_id,
         track_id=payload.track_id,
         ratings=ratings,
@@ -651,12 +769,20 @@ def post_review(
             if a["key"] == new_achievement:
                 ach_detail = {"key": a["key"], "name_ru": a["name_ru"], "icon": a["icon"]}
                 break
-    exp_gained = 10 if was_first_time else 0
+    base_exp = 10 if was_first_time else 0
+    gam = gam or {}
+    extra_exp = (
+        gam.get("streak_milestone_exp", 0)
+        + gam.get("daily_task_exp", 0)
+        + gam.get("referral_invitee_exp", 0)
+    )
+    exp_gained = base_exp + extra_exp
     return {
         "ok": True,
         "total": total,
         "exp_gained": exp_gained,
         "achievement_unlocked": ach_detail,
+        "gamification": gam,
     }
 
 
@@ -666,23 +792,27 @@ app.include_router(api, prefix="/api")
 MINIAPP_DIR = os.path.join(os.path.dirname(__file__), "miniapp_static")
 
 
+_NO_CACHE = {"Cache-Control": "no-store, no-cache, must-revalidate, max-age=0", "Pragma": "no-cache"}
+
+
 @app.get("/")
 def miniapp_index():
-    """Главная страница Mini App."""
+    """Главная страница Mini App (без кэша — иначе Telegram WebView держит старый index.html)."""
     index_path = os.path.join(MINIAPP_DIR, "index.html")
     if os.path.isfile(index_path):
-        return FileResponse(index_path)
+        return FileResponse(index_path, headers=_NO_CACHE)
     return {"app": "Music Bot Mini App API", "docs": "/docs"}
 
 
 @app.get("/miniapp/{path:path}")
 def miniapp_static(path: str):
-    """Статика Mini App (js, css)."""
+    """Статика Mini App; HTML — без кэша."""
     full = os.path.join(MINIAPP_DIR, path)
     if not os.path.abspath(full).startswith(os.path.abspath(MINIAPP_DIR)):
         raise HTTPException(status_code=404)
     if os.path.isfile(full):
-        return FileResponse(full)
+        hdr = _NO_CACHE if path.lower().endswith(".html") else None
+        return FileResponse(full, headers=hdr) if hdr else FileResponse(full)
     raise HTTPException(status_code=404)
 
 

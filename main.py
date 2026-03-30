@@ -6,6 +6,7 @@ from telegram.ext import (
     MessageHandler,
     CallbackQueryHandler,
     InlineQueryHandler,
+    PreCheckoutQueryHandler,
     filters,
 )
 from telegram import Update, InlineQueryResultArticle, InputTextMessageContent
@@ -19,6 +20,7 @@ from handlers.start_handler import start, handle_nickname, back_to_menu
 from handlers.search_handler import start_search, handle_search, handle_rating_callback
 from handlers.daily_track_handler import show_daily_track
 from handlers.chart_handler import show_chart
+from handlers.chart_explore_handler import chart_explore_start, chart_explore_skip, chart_explore_exit
 from handlers.top_tracks_handler import show_top_tracks
 from handlers.my_reviews_db_handler import view_reviews, show_detail_review, view_favorites, view_downloads
 from handlers.global_reviews_handler import (
@@ -59,6 +61,13 @@ from handlers.profile_handler import (
 )
 from handlers.web_handler import webapp_handler
 from handlers.inline_handler import inline_search
+from handlers.premium_handler import (
+    show_premium_menu,
+    premium_buy_callback,
+    pre_checkout,
+    successful_payment,
+    cmd_premium,
+)
 from database import init_db, add_exp
 from utils import user_states, EXP_FOR_REVIEW
 from keyboards import after_review_buttons
@@ -114,7 +123,15 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         add_exp(user_id, EXP_FOR_REVIEW)
         track_id = state["track_id"]
+        explore = state.get("explore")
+        nickname = state.get("nickname")
         del user_states[user_id]
+        if explore or nickname:
+            user_states[user_id] = {"stage": "menu"}
+            if explore:
+                user_states[user_id]["explore"] = explore
+            if nickname:
+                user_states[user_id]["nickname"] = nickname
         await update.message.reply_text("✅ Рецензия добавлена!", reply_markup=after_review_buttons(track_id=track_id))
         return
 
@@ -146,6 +163,9 @@ def main():
     app.add_handler(CommandHandler("stats", cmd_stats))
     app.add_handler(CommandHandler("search", cmd_search))
     app.add_handler(CommandHandler("invite", invite_friends))
+    app.add_handler(CommandHandler("premium", cmd_premium))
+    app.add_handler(PreCheckoutQueryHandler(pre_checkout))
+    app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     app.add_handler(MessageHandler(filters.PHOTO, handle_profile_photo))
 
@@ -163,6 +183,9 @@ def main():
 
     # Трек дня и чарт
     app.add_handler(CallbackQueryHandler(show_daily_track, pattern="^show_daily_track$"))
+    app.add_handler(CallbackQueryHandler(chart_explore_start, pattern="^chart_explore_start$"))
+    app.add_handler(CallbackQueryHandler(chart_explore_skip, pattern="^chart_explore_skip$"))
+    app.add_handler(CallbackQueryHandler(chart_explore_exit, pattern="^chart_explore_exit$"))
     app.add_handler(CallbackQueryHandler(show_chart, pattern="^show_chart$"))
     app.add_handler(CallbackQueryHandler(show_chart, pattern="^chart_page_\\d+$"))
     app.add_handler(CallbackQueryHandler(start_playlist, pattern="^start_playlist$"))
@@ -173,6 +196,8 @@ def main():
 
     # Профиль и лидерборд
     app.add_handler(CallbackQueryHandler(show_profile, pattern="^show_profile$"))
+    app.add_handler(CallbackQueryHandler(show_premium_menu, pattern="^show_premium$"))
+    app.add_handler(CallbackQueryHandler(premium_buy_callback, pattern="^premium_buy$"))
     app.add_handler(CallbackQueryHandler(profile_edit, pattern="^profile_edit$"))
     app.add_handler(CallbackQueryHandler(profile_set_avatar, pattern="^profile_set_avatar$"))
     app.add_handler(CallbackQueryHandler(profile_set_nickname, pattern="^profile_set_nickname$"))

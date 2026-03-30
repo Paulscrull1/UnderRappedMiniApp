@@ -12,6 +12,8 @@ def main_menu():
         ])
     keyboard.extend([
         [InlineKeyboardButton("👤 Профиль", callback_data="show_profile")],
+        [InlineKeyboardButton("🎲 Топ-100 на оценку", callback_data="chart_explore_start")],
+        [InlineKeyboardButton("⭐ Premium", callback_data="show_premium")],
         [InlineKeyboardButton("🏆 Лидерборд", callback_data="show_leaderboard")],
         [InlineKeyboardButton("🌞 Трек дня", callback_data="show_daily_track")],
         [InlineKeyboardButton("📊 Чарт Яндекс Музыки", callback_data="show_chart")],
@@ -171,6 +173,21 @@ def track_card_buttons(track_id: str, track_url: str, in_favorites: bool, source
     return InlineKeyboardMarkup(rows)
 
 
+def track_card_buttons_with_explore(track_id: str, track_url: str, in_favorites: bool, source: str = ""):
+    """Карточка трека в режиме подборки чарта: строка «Пропустить» / «Выход»."""
+    m = track_card_buttons(track_id, track_url, in_favorites, source)
+    rows = [list(row) for row in m.inline_keyboard]
+    explore_row = [
+        InlineKeyboardButton("⏭ Дальше", callback_data="chart_explore_skip"),
+        InlineKeyboardButton("🛑 Закончить", callback_data="chart_explore_exit"),
+    ]
+    if rows:
+        rows.insert(-1, explore_row)
+    else:
+        rows.append(explore_row)
+    return InlineKeyboardMarkup(rows)
+
+
 def chart_list_buttons(tracks):
     """
     Список кнопок для чарта: каждая — callback chart_track_{hash}.
@@ -190,20 +207,24 @@ def chart_list_buttons(tracks):
 CHART_PAGE_SIZE = 20
 
 
-def chart_list_buttons_paginated(tracks, page=0, per_page=None):
+def chart_list_buttons_paginated(tracks, page=0, per_page=None, reviewed_ids=None):
     """
     Чарт с пагинацией: tracks — полный список, page — номер страницы (0-based).
-    Добавляет кнопки ◀ Назад | Стр. N | Вперёд ▶ и Назад в меню.
+    reviewed_ids — set строковых track_id для префикса ✓ на кнопке.
     """
     per_page = per_page or CHART_PAGE_SIZE
     start = page * per_page
     chunk = tracks[start : start + per_page]
     from utils import hash_id, hash_to_track_id
+    reviewed_ids = reviewed_ids or set()
+    reviewed_str = {str(x) for x in reviewed_ids}
     buttons = []
     for t in chunk:
         safe_hash = hash_id(t["id"])
         hash_to_track_id[safe_hash] = t["id"]
-        label = f"{t['title']} — {t['artist']}"[:60]
+        tid = str(t["id"])
+        prefix = "✓ " if tid in reviewed_str else ""
+        label = f"{prefix}{t['title']} — {t['artist']}"[:64]
         buttons.append([InlineKeyboardButton(label, callback_data=f"chart_track_{safe_hash}")])
     total_pages = (len(tracks) + per_page - 1) // per_page if tracks else 1
     nav = []

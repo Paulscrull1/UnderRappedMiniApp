@@ -14,6 +14,48 @@ def test_init_db(temp_db):
     assert "users" in tables
     assert "user_favorites" in tables
     assert "user_progress" in tables
+    assert "premium_payments" in tables
+
+
+def test_premium_payment_extend_and_idempotent(temp_db):
+    import database
+    database.save_user_nickname(42, "U42")
+    new, until = database.try_record_premium_payment_and_extend(
+        42,
+        "tg-charge-1",
+        "premium_test_payload",
+        99,
+        expected_payload="premium_test_payload",
+        expected_amount=99,
+        duration_days=14,
+    )
+    assert new is True
+    assert until
+    st = database.get_premium_status(42)
+    assert st["active"] is True
+    assert st["until"]
+
+    new2, _until2 = database.try_record_premium_payment_and_extend(
+        42,
+        "tg-charge-1",
+        "premium_test_payload",
+        99,
+        expected_payload="premium_test_payload",
+        expected_amount=99,
+        duration_days=14,
+    )
+    assert new2 is False
+    assert _until2
+
+
+def test_premium_payment_wrong_payload(temp_db):
+    import database
+    database.save_user_nickname(7, "U7")
+    new, until = database.try_record_premium_payment_and_extend(
+        7, "x", "bad", 1, expected_payload="good", expected_amount=1, duration_days=1
+    )
+    assert new is False
+    assert until is None
 
 
 def test_save_and_get_user_nickname(temp_db):
@@ -22,6 +64,16 @@ def test_save_and_get_user_nickname(temp_db):
     assert database.get_user_nickname(1) == "TestUser"
     database.save_user_nickname(1, "NewNick")
     assert database.get_user_nickname(1) == "NewNick"
+
+
+def test_get_user_reviewed_track_ids(temp_db):
+    import database
+    r = {"rhymes": 5, "rhythm": 5, "style": 5, "charisma": 5, "vibe": 5}
+    database.save_review(9, "ya:1", r, "T", "A", "U")
+    database.save_review(9, "ya:2", r, "T2", "A2", "U")
+    ids = database.get_user_reviewed_track_ids(9)
+    assert set(ids) == {"ya:1", "ya:2"}
+    assert database.get_user_reviewed_track_ids(99) == []
 
 
 def test_save_review_and_get_last_reviews(temp_db):

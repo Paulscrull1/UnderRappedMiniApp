@@ -78,9 +78,15 @@ async def handle_rating_callback(update: Update, context: ContextTypes.DEFAULT_T
     await query.answer()
 
     if data == "cancel_rating":
+        explore = state.get("explore")
+        nick = state.get("nickname")
         await query.edit_message_text("❌ Оценка отменена.", reply_markup=back_to_menu_button())
         if user_id in user_states:
             del user_states[user_id]
+        if explore:
+            user_states[user_id] = {"stage": "menu", "explore": explore}
+            if nick:
+                user_states[user_id]["nickname"] = nick
         return
 
     if data.startswith("rate_"):
@@ -116,9 +122,13 @@ async def handle_rating_callback(update: Update, context: ContextTypes.DEFAULT_T
             )
             await query.edit_message_text(result_text, parse_mode='Markdown')
 
+            explore = state.get("explore")
+            track_rated = state["track_id"]
+            nick = state.get("nickname")
+
             save_review(
                 user_id=user_id,
-                track_id=state['track_id'],
+                track_id=track_rated,
                 ratings=state['ratings'],
                 track_title=state['track_title'],
                 track_artist=state['track_artist'],
@@ -126,9 +136,23 @@ async def handle_rating_callback(update: Update, context: ContextTypes.DEFAULT_T
                 genre=state['genre']
             )
 
-            del user_states[user_id]
+            if explore:
+                ids = list(explore["track_ids"])
+                idx = explore["index"]
+                if idx < len(ids) and str(ids[idx]) == str(track_rated):
+                    idx += 1
+                new_st = {"stage": "menu", "explore": {"track_ids": ids, "index": idx}}
+                if nick:
+                    new_st["nickname"] = nick
+                user_states[user_id] = new_st
+                from handlers.chart_explore_handler import chart_explore_send_current
 
-            await query.message.reply_text(
-                "✅ Оценка сохранена!",
-                reply_markup=after_review_buttons(track_id=state['track_id'])
-            )
+                await query.message.reply_text("✅ Оценка сохранена!")
+                await chart_explore_send_current(update, context, 0)
+            else:
+                if user_id in user_states:
+                    del user_states[user_id]
+                await query.message.reply_text(
+                    "✅ Оценка сохранена!",
+                    reply_markup=after_review_buttons(track_id=track_rated),
+                )

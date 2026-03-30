@@ -7,6 +7,7 @@ from database import (
     get_user_nickname,
     save_user_nickname,
     get_user_progress,
+    get_premium_status,
     update_profile_avatar,
     update_profile_description,
     set_pinned_track,
@@ -26,9 +27,12 @@ from keyboards import (
 from utils import user_states, hash_to_track_id, level_progress_bar
 
 
-def _profile_text(profile: dict, progress: dict) -> str:
-    """Текст профиля: ник, описание, закреплённый трек, уровень."""
+def _profile_text(profile: dict, progress: dict, user_id: int) -> str:
+    """Текст профиля: ник, описание, закреплённый трек, уровень, Premium."""
     parts = [f"👤 *{profile['nickname']}*", f"📊 {level_progress_bar(progress['level'], progress['exp'])}"]
+    prem = get_premium_status(user_id)
+    if prem.get("active"):
+        parts.append("\n⭐ *Premium* активен")
     if profile.get("description"):
         parts.append(f"\n📄 {profile['description']}")
     if profile.get("pinned_track_id"):
@@ -63,7 +67,7 @@ async def show_profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "pinned_track_artist": None,
         }
     progress = get_user_progress(user_id)
-    text = _profile_text(profile, progress)
+    text = _profile_text(profile, progress, user_id)
 
     try:
         if query and getattr(msg, "photo", None):
@@ -372,7 +376,7 @@ async def _send_profile_for_user(chat_id: int, target_user_id: int, context: Con
             "pinned_track_artist": None,
         }
     progress = get_user_progress(target_user_id)
-    text = _profile_text(profile, progress)
+    text = _profile_text(profile, progress, target_user_id)
     kb = back_to_leaderboard_button()
 
     if profile.get("avatar_file_id"):

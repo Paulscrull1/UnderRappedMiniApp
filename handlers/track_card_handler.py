@@ -10,7 +10,16 @@ from yandex_music_service import download_track_bytes as yandex_download_track_b
 from soundcloud_service import download_track_bytes as soundcloud_download_track_bytes
 from music_providers import get_track_by_id
 import config
-from database import is_in_favorites, add_favorite, remove_favorite, add_exp, add_download, get_track_rating_stats
+from database import (
+    is_in_favorites,
+    add_favorite,
+    remove_favorite,
+    add_exp,
+    add_download,
+    get_track_rating_stats,
+    mark_daily_favorite_task,
+    user_has_reviewed,
+)
 from keyboards import track_card_buttons, rating_buttons
 from utils import user_states, hash_to_track_id, CRITERIA_NAMES, EXP_FOR_FAVORITE
 from database import get_user_nickname
@@ -23,13 +32,15 @@ def _get_track_dict(track_id, track_dict=None):
     return get_track_by_id(track_id)
 
 
-def build_card_caption(track):
-    """Текст карточки: название, исполнитель, жанр; средний балл из БД при наличии."""
+def build_card_caption(track, user_id: int = None):
+    """Текст карточки: название, исполнитель, жанр; средний балл; пометка «уже оценили вы»."""
     title = track.get("title", "Без названия")
     artist = track.get("artist", "Неизвестен")
     genre = track.get("genre", "—")
     lines = [f"🎧 *{title}*", f"👤 {artist}", f"🏷 {genre}"]
     track_id = track.get("id")
+    if track_id and user_id is not None and user_has_reviewed(user_id, track_id):
+        lines.append("✅ *Вы уже оценивали этот трек*")
     if track_id:
         stats = get_track_rating_stats(track_id)
         if stats:
@@ -48,7 +59,7 @@ async def send_track_card(message_or_query, track_id, user_id, track_dict=None, 
         if hasattr(message_or_query, "reply_text"):
             await message_or_query.reply_text("❌ Не удалось загрузить трек.")
         return None
-    caption = build_card_caption(track)
+    caption = build_card_caption(track, user_id)
     url = track.get("track_url") or ""
     if not url and track.get("source") != "soundcloud":
         url = f"https://music.yandex.ru/search?text={track.get('artist', '')}+{track.get('title', '')}"
@@ -80,7 +91,7 @@ async def handle_chart_track(update: Update, context: ContextTypes.DEFAULT_TYPE)
     if not track:
         await query.edit_message_text("❌ Не удалось загрузить трек.")
         return
-    caption = build_card_caption(track)
+    caption = build_card_caption(track, user_id)
     url = track.get("track_url") or ""
     in_fav = is_in_favorites(user_id, track["id"])
     markup = track_card_buttons(track["id"], url, in_fav, track.get("source") or "")
@@ -112,7 +123,7 @@ async def handle_playlist_track(update: Update, context: ContextTypes.DEFAULT_TY
     if not track:
         await query.edit_message_text("❌ Не удалось загрузить трек.")
         return
-    caption = build_card_caption(track)
+    caption = build_card_caption(track, user_id)
     url = track.get("track_url") or ""
     in_fav = is_in_favorites(user_id, track["id"])
     markup = track_card_buttons(track["id"], url, in_fav, track.get("source") or "")
@@ -144,7 +155,7 @@ async def handle_search_track(update: Update, context: ContextTypes.DEFAULT_TYPE
     if not track:
         await query.edit_message_text("❌ Не удалось загрузить трек.")
         return
-    caption = build_card_caption(track)
+    caption = build_card_caption(track, user_id)
     url = track.get("track_url") or ""
     in_fav = is_in_favorites(user_id, track["id"])
     markup = track_card_buttons(track["id"], url, in_fav, track.get("source") or "")
@@ -177,6 +188,9 @@ async def handle_rate_track(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.answer("❌ Не удалось загрузить трек.", show_alert=True)
         return
     nickname = get_user_nickname(user_id) or user_states.get(user_id, {}).get("nickname", "Аноним")
+    prev_explore = None
+    if user_id in user_states and isinstance(user_states[user_id], dict):
+        prev_explore = user_states[user_id].get("explore")
     user_states[user_id] = {
         "stage": "rating",
         "track_id": track_id,
@@ -188,6 +202,8 @@ async def handle_rate_track(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "genre": track.get("genre"),
         "is_daily": False,
     }
+    if prev_explore:
+        user_states[user_id]["explore"] = prev_explore
     await query.message.reply_text(
         f"Оценим этот трек!\n\n🔹 *{CRITERIA_NAMES['rhymes']}*\nВыбери оценку от 1 до 10:",
         parse_mode="Markdown",
@@ -366,9 +382,10 @@ async def handle_fav_toggle(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         add_favorite(user_id, track_id, track["title"], track["artist"])
         add_exp(user_id, EXP_FOR_FAVORITE)
+        mark_daily_favorite_task(user_id)
         in_fav = True
     markup = track_card_buttons(track_id, url, in_fav, track.get("source") or "")
-    caption = build_card_caption(track)
+    caption = build_card_caption(track, user_id)
     try:
         await query.edit_message_reply_markup(reply_markup=markup)
     except Exception:

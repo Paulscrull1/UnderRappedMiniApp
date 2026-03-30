@@ -24,3 +24,23 @@ BOT_USERNAME = os.environ.get("BOT_USERNAME", "").strip() or None
 # SoundCloud API (для поиска и карточек треков). Один токен на всё приложение, обновляется по refresh_token.
 SOUNDCLOUD_CLIENT_ID = os.environ.get("SOUNDCLOUD_CLIENT_ID", "").strip() or None
 SOUNDCLOUD_CLIENT_SECRET = os.environ.get("SOUNDCLOUD_CLIENT_SECRET", "").strip() or None
+
+# Premium через Telegram Stars (XTR). Цена — в звёздах; срок — календарные дни, продлевается от текущего окончания.
+try:
+    PREMIUM_STAR_PRICE = max(1, int(os.environ.get("PREMIUM_STAR_PRICE", "50") or "50"))
+except ValueError:
+    PREMIUM_STAR_PRICE = 50
+try:
+    PREMIUM_DURATION_DAYS = max(1, int(os.environ.get("PREMIUM_DURATION_DAYS", "30") or "30"))
+except ValueError:
+    PREMIUM_DURATION_DAYS = 30
+PREMIUM_INVOICE_PAYLOAD = (os.environ.get("PREMIUM_INVOICE_PAYLOAD", "premium_month_v1") or "premium_month_v1").strip()[:128]
+PREMIUM_PRODUCT_TITLE = (os.environ.get("PREMIUM_PRODUCT_TITLE", "UnderRapped Premium") or "UnderRapped Premium").strip()[:32]
+PREMIUM_PRODUCT_LABEL = (os.environ.get("PREMIUM_PRODUCT_LABEL", "Premium") or "Premium").strip()[:256]
+PREMIUM_PRODUCT_DESCRIPTION = (
+    os.environ.get(
+        "PREMIUM_PRODUCT_DESCRIPTION",
+        "Подписка: значок в Mini App, ранний доступ к новинкам и поддержка проекта.",
+    )
+    or "Premium"
+).strip()[:255]
